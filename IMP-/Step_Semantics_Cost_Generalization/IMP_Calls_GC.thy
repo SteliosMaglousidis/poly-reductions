@@ -1,5 +1,5 @@
 
-theory IMP_Calls_GC imports Vars Big_StepT_Generalized_Cost_Final begin
+theory IMP_Calls_GC imports "../Vars" Big_StepT_Generalized_Cost_Final begin
 
 section "IMP"
 
