@@ -12,9 +12,11 @@ subsection "Big step semantics definition:"
 text "In IMP- Branching is only based on whether a variable's value equals 0."
 
 locale BS_Generalized_Cost =
-  fixes skip_costs :: "state \<Rightarrow> nat" and 
+  fixes skip_cost :: "state \<Rightarrow> nat" and 
       value_cost :: "nat \<Rightarrow> nat"
-    assumes skip_cost_pos: "\<And> s. skip_costs s > 0"
+    assumes skip_cost_pos: "\<And> s. skip_cost s > 0"
+      (* Not sure if too restricting. Fits with the assign cost model*)
+    assumes skip_cost_var_names: "\<And> s a x y. skip_cost (s(x := aval a s)) = skip_cost (s(y := aval a s))"
 begin 
 
 
@@ -30,8 +32,9 @@ fun aexp_cost :: "aexp \<Rightarrow> state \<Rightarrow> nat" where
   "aexp_cost (Parity n) s = atomVal_cost n s" |
   "aexp_cost (RightShift n) s = atomVal_cost n s" 
 
+abbreviation "skip_costs \<equiv> (\<lambda>s. 1 + (skip_cost s))"
 abbreviation "while_exit_costs \<equiv> (\<lambda>x. 1 + (skip_costs x))"
-abbreviation "assign_costs  \<equiv> (\<lambda>x y . aexp_cost x y + 1)"
+abbreviation "assign_costs  \<equiv> (\<lambda>x y . aexp_cost x y + (skip_costs (y(''x'' := aval x y))) + 1)"
 
 inductive
   big_step_tG :: "com \<times> state \<Rightarrow> nat \<Rightarrow> state \<Rightarrow> bool"  ("_ \<Rightarrow>\<^sub>G\<^bsup> _ \<^esup> _" 55)
@@ -39,8 +42,8 @@ where
 Skip: "(SKIP,s) \<Rightarrow>\<^sub>G\<^bsup> skip_costs s \<^esup> s"|
 Assign: "(x ::= a,s) \<Rightarrow>\<^sub>G\<^bsup> assign_costs a s \<^esup> s(x := aval a s)" |
 Seq: "\<lbrakk> (c1,s1) \<Rightarrow>\<^sub>G\<^bsup> C1 \<^esup> s2;  (c2,s2) \<Rightarrow>\<^sub>G\<^bsup> C2 \<^esup> s3 ; C3 = C1 + C2 \<rbrakk> \<Longrightarrow> (c1;;c2, s1) \<Rightarrow>\<^sub>G\<^bsup> C3 \<^esup> s3" |
-IfTrue: "\<lbrakk> s b \<noteq> 0;  (c1,s) \<Rightarrow>\<^sub>G\<^bsup> C \<^esup> t; C'= C + 1 \<rbrakk> \<Longrightarrow> (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^sub>G\<^bsup> C' \<^esup> t" |
-IfFalse: "\<lbrakk> s b = 0; (c2,s) \<Rightarrow>\<^sub>G\<^bsup> C \<^esup> t; C'=  C + 1 \<rbrakk> \<Longrightarrow> (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^sub>G\<^bsup> C' \<^esup> t" |
+IfTrue: "\<lbrakk> s b \<noteq> 0;  (c1,s) \<Rightarrow>\<^sub>G\<^bsup> C \<^esup> t; C'= Suc C \<rbrakk> \<Longrightarrow> (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^sub>G\<^bsup> C' \<^esup> t" |
+IfFalse: "\<lbrakk> s b = 0; (c2,s) \<Rightarrow>\<^sub>G\<^bsup> C \<^esup> t; C'=  Suc C \<rbrakk> \<Longrightarrow> (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^sub>G\<^bsup> C' \<^esup> t" |
 WhileFalse: "\<lbrakk> s b = 0 \<rbrakk> \<Longrightarrow> (WHILE b \<noteq>0 DO c,s) \<Rightarrow>\<^sub>G\<^bsup> while_exit_costs s \<^esup> s" |
 WhileTrue: "\<lbrakk> s1 b \<noteq> 0;  (c,s1) \<Rightarrow>\<^sub>G\<^bsup> C1 \<^esup> s2;  (WHILE b \<noteq>0 DO c, s2) \<Rightarrow>\<^sub>G\<^bsup> C2 \<^esup> s3; C3 = C1 + C2 + 1\<rbrakk> 
     \<Longrightarrow> (WHILE b \<noteq>0 DO c, s1) \<Rightarrow>\<^sub>G\<^bsup> C3 \<^esup> s3" 
@@ -122,6 +125,22 @@ lemma Seq_costs_split: "(c1;;c2, s1) \<Rightarrow>\<^sub>G\<^bsup> C \<^esup> s3
 lemma While_costs_split: "\<lbrakk> s1 b \<noteq> 0;  (WHILE b \<noteq>0 DO c, s1) \<Rightarrow>\<^sub>G\<^bsup> C \<^esup> s3\<rbrakk> 
     \<Longrightarrow> \<exists>C1 C2 s2. ((c,s1) \<Rightarrow>\<^sub>G\<^bsup> C1 \<^esup> s2) \<and> ((WHILE b \<noteq>0 DO c, s2) \<Rightarrow>\<^sub>G\<^bsup> C2 \<^esup> s3) \<and> C = C1 + C2  + 1"
   by force
+
+lemma skip_costs_name: "skip_costs (y(''x'' := aval x y)) = skip_costs (y(z := aval x y))"
+  by (simp add: skip_cost_var_names)
+
+corollary assign_costs_simp[simp]: "assign_costs = (\<lambda>x y . aexp_cost x y + (skip_costs (y(z := aval x y))) + 1)"
+  using skip_cost_var_names by fastforce
+
+
+lemma at_least_skip_costs: "(c, s) \<Rightarrow>\<^sub>G\<^bsup> x \<^esup> s' \<Longrightarrow> \<exists>x'. x = x' + skip_costs s'"
+proof (induction c s x s' rule: big_step_tG_induct)
+  case (2 x a s)
+  have \<open>skip_costs (s(''x'' := aval a s)) = skip_costs (s(x := aval a s))\<close>
+    by (simp add: skip_cost_var_names)
+  then show ?case 
+    by presburger
+qed auto
 
 
 thm While_tE
@@ -259,14 +278,13 @@ lemma seq_is_noop[simp]: "((SKIP, s) \<Rightarrow>\<^sub>G\<^bsup>t\<^esup> s') 
   using Skip by auto
 
 lemma seq_skip[simp]: "((c ;; SKIP, s) \<Rightarrow>\<^sub>G\<^bsup> t + skip_costs s'\<^esup> s') \<longleftrightarrow> ((c, s) \<Rightarrow>\<^sub>G\<^bsup>t\<^esup> s')"
-  by (auto simp add: Seq')
+  by (metis Seq_costs_split add_right_cancel big_step_tG.Seq big_step_tG.Skip local.Skip_tE)
 
 subsection "Progress property"
 text "every command costs time"
 
 lemma bigstep_progress:  "(c, s) \<Rightarrow>\<^sub>G\<^bsup> p \<^esup> t \<Longrightarrow> p > 0"
-  apply(induct rule: big_step_tG.induct, auto)
-  by (simp add: skip_cost_pos)
+  by (induct rule: big_step_tG.induct, auto)
   
 subsection "abbreviations and properties"
 abbreviation terminates ("\<down>\<^sub>G") where "terminates cs \<equiv> (\<exists>n a. (cs \<Rightarrow>\<^sub>G\<^bsup> n \<^esup> a))"

@@ -2,7 +2,7 @@
 section "Small step semantics of IMP- "
 
 subsection "Small step semantics definition"
-theory Small_StepT_GC  imports Big_StepT_Generalized_Cost_Final Main Com Rel_Pow begin
+theory Small_StepT_GC  imports Big_StepT_Generalized_Cost_Final Main "../Com" "../Rel_Pow" begin
 
 paragraph "Summary"
 
@@ -11,25 +11,6 @@ text\<open>Naive approach to generalize costs similar to big step.
      rather than the predicate.\<close>
 
 context BS_Generalized_Cost begin
-
-inductive
-  atomic_step_GC :: "com * state * nat \<Rightarrow> com * state * nat \<Rightarrow> bool" ("_ \<rightarrow>\<^sub>G\<^sub>C\<^sub>A _" 55) 
-  where
-
-atomic_step: "(c, s, Suc n) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c, s, n)" |
-
-Assign:  "(x ::= a, s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (SKIP, s(x := aval a s), assign_costs a s)" |
-
-Seq1:    "(SKIP;;c\<^sub>2,s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c\<^sub>2,s,skip_costs s)" |
-Seq2:    "(c\<^sub>1,s,m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c\<^sub>1',s',m') \<Longrightarrow> (c\<^sub>1;;c\<^sub>2,s,m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c\<^sub>1';;c\<^sub>2,s',m')" |
-
-IfTrue:  "s b \<noteq> 0 \<Longrightarrow> (IF b \<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c\<^sub>1,s,0)" |
-IfFalse: "s b = 0 \<Longrightarrow> (IF b \<noteq>0  THEN c\<^sub>1 ELSE c\<^sub>2,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c\<^sub>2,s,0)" |
-                                                   
-WhileTrue:   "s b \<noteq> 0 \<Longrightarrow> (WHILE b\<noteq>0 DO c,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A
-            (c ;; WHILE b \<noteq>0 DO c,s,0)" |
-WhileFalse:   "s b = 0 \<Longrightarrow> (WHILE b\<noteq>0 DO c,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A
-            (SKIP,s,0)"
 
 inductive
   small_step_GC :: "com * state \<Rightarrow> nat \<Rightarrow> com * state \<Rightarrow> bool" ("_ \<rightarrow>\<^sub>G\<^sub>C\<^bsup> _ \<^esup> _" 55) 
