@@ -1,99 +1,29 @@
 \<^marker>\<open>creator Florian Kessler\<close>
 
 theory Generalized_Memory
-  imports Big_Step_Atomic_Step_Equivalence "HOL-Library.Discrete" "Max_Constant_GC"
+  imports Big_Step_Atomic_Step_Equivalence Small_Step_Atomic_Step_Equivalence "HOL-Library.Discrete" "Max_Constant_GC" "../Memory"
 begin
 
 context BS_Generalized_Cost begin
 
-text \<open> We give a definition for the amount of memory that an IMP- program uses during its 
-       execution, and show that there is a bound that is linear in the number of steps the
-       execution takes. \<close>
-
-definition bit_length where "bit_length x \<equiv>  Discrete.log x + 1"
-
-lemma bit_length_monotonic: "x \<le> y \<Longrightarrow> bit_length x \<le> bit_length y" 
-  by(auto simp: bit_length_def log_le_iff)
-
-lemma bit_length_of_power_of_two: "y > 0 \<Longrightarrow> bit_length (2 ^ x * y) = x + bit_length y"
-  apply(induction x)
-  by(auto simp: bit_length_def mult.assoc)
-
-text \<open> The amount of memory a single state uses. Note that we only consider registers that 
-       can be accessed by the program, hence the additional parameter 'c' in this definition. \<close>
-
-definition state_memory :: "com \<Rightarrow> state \<Rightarrow> nat" where
-"state_memory c s = fold (+) (map (\<lambda> r. bit_length (s r)) (remdups (all_variables c))) 0"
-
 text \<open> We define something to be a memory bound for a program and an initial state, if it
        bounds every state that is reachable. \<close>
 
-definition is_memory_bound :: "com \<Rightarrow> state \<Rightarrow> nat \<Rightarrow> bool" where
-"is_memory_bound c s n \<equiv> (\<forall> t c' s'. (c, s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup>t\<^esup> (c', s', 0) \<longrightarrow> state_memory c' s' \<le> n)"
+definition is_memory_bound_GC :: "com \<Rightarrow> state \<Rightarrow> nat \<Rightarrow> bool" where
+"is_memory_bound_GC c s n \<equiv> (\<forall> t c' s'. (c, s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup>t\<^esup> (c', s', 0) \<longrightarrow> state_memory c' s' \<le> n)"
 
-lemma x_leq_fold_max_l_x: "(x :: nat) \<le> fold max l x" 
-proof(induction l arbitrary: x)
-  case (Cons a l)
-  then show ?case by (auto intro: le_trans[where ?j = "max a x"])
-qed auto
+lemma memory_bound_to_small_step: "is_memory_bound_GC c s n \<equiv> is_memory_bound c s n"
+proof-
+  have "is_memory_bound_GC c s n \<Longrightarrow> is_memory_bound c s n"
+  using is_memory_bound_GC_def is_memory_bound_def apply auto
+  by (meson small_atomic_same_comp)
+  moreover have \<open>is_memory_bound c s n \<Longrightarrow> is_memory_bound_GC c s n\<close>
+    using is_memory_bound_GC_def is_memory_bound_def apply auto
+    by (metis atomic_small_same_comp)
+  ultimately show \<open>is_memory_bound_GC c s n \<equiv> is_memory_bound c s n\<close>
+    by argo
+qed
 
-lemma fold_max_l_x_le_l_y: "(x :: nat) \<le> y \<Longrightarrow> fold max l x \<le> fold max l y" 
-  by (induction l arbitrary: x y) auto
-
-lemma sum_of_list_leq_length_times_max: "length l * fold max l (0 :: nat) \<le> k \<Longrightarrow> fold (+) l 0 \<le> k"
-proof(induction l arbitrary: k)
-  case (Cons a l)
-  let ?k = "length l * fold max l (0 :: nat)"
-  have "fold (+) (a # l) 0 = a + fold (+) l 0" by (simp add: fold_plus_sum_list_rev)
-  also have "... \<le> a + ?k" using Cons.IH[where ?k="?k"] by simp
-  also have "... \<le> fold max l a + ?k" 
-    using x_leq_fold_max_l_x by simp
-  also have "... \<le> fold max l a + length l * fold max l a" 
-    using fold_max_l_x_le_l_y by simp
-  finally show ?case using Cons by auto
-qed auto
-
-lemma max_bit_length_bit_length: "max (bit_length x) (bit_length y) = bit_length (max x y)"
-  by (simp add: bit_length_def log_mono max_of_mono)
-
-lemma fold_max_map_bit_length: "l \<noteq> [] 
-  \<Longrightarrow> fold max (map (\<lambda>x. bit_length (f x)) l) (bit_length a) = bit_length (fold max (map f l) a)"
-proof(induction l arbitrary: a)
-  case (Cons a l)
-  then show ?case by (cases l) (auto simp: max_bit_length_bit_length)
-qed auto
-
-lemma fold_max_map_bit_length': 
-  assumes "l \<noteq> []"
-  shows "fold max (map (\<lambda>x. bit_length (f x)) l) 0 = bit_length (fold max (map f l) 0)"
-  using assms proof(induction l)
-  case (Cons a l)
-  then show ?case 
-    apply(auto simp: max_bit_length_bit_length)
-    apply(cases l)
-     apply simp
-    apply(rule fold_max_map_bit_length )
-    by simp
-qed auto
-
-lemma remdups_non_empty_iff[simp]: "remdups l \<noteq> [] \<longleftrightarrow> l \<noteq> []"
-  by (induction l) auto
-
-lemma fold_max_map_le_Max_range: 
-  "finite (range (f :: _ \<Rightarrow> nat)) \<Longrightarrow> fold max (map f l) x \<le> max x (Max (range f))"
-  apply(induction l arbitrary: x)
-   apply auto
-  by (smt Max.in_idem max.assoc max.commute rangeI)
-
-lemma fold_max_map_le_Max_range': 
-  "finite (range (f :: _ \<Rightarrow> nat)) \<Longrightarrow> fold max (map f l) 0 \<le> Max (range f)"
-  using fold_max_map_le_Max_range
-  by (metis max_0L)
-
-lemma Max_register_bounds_state_memory: "finite (range s) 
-  \<Longrightarrow> state_memory c s \<le> num_variables c * bit_length (Max (range s))"
-  by(auto simp: num_variables_def fold_max_map_bit_length' state_memory_def
-          intro!: bit_length_monotonic fold_max_map_le_Max_range' sum_of_list_leq_length_times_max)
 
 lemma finite_range_stays_finite_step: "(c1, s1, m1) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c2, s2, m2) \<Longrightarrow> finite (range s1)
   \<Longrightarrow> finite (range s2)"
@@ -105,18 +35,6 @@ lemma finite_range_stays_finite: "(c1, s1, m1)  \<rightarrow>\<^sub>G\<^sub>C\<^
   \<Longrightarrow> finite (range s2)"
   apply(induction t arbitrary: c1 s1 m1)
    using finite_range_stays_finite_step by auto
-
-lemma Max_insert_le_when: "finite (range (s :: vname \<Rightarrow> nat)) \<Longrightarrow> y \<le> r \<Longrightarrow>  Max (range s) \<le> r 
-  \<Longrightarrow> Max (range (s(x := y))) \<le> r"
-  apply auto
-  apply(subst Max_insert)
-    apply(metis Un_infinite image_Un sup_top_right)
-   apply(auto)
-  apply(subst Max_le_iff)
-    apply(metis Un_infinite image_Un sup_top_right)
-  by auto
-
-lemma le_then_sub_le: "(a :: nat) \<le> b \<Longrightarrow> a - c \<le> b" by simp
 
 lemma one_step_Max_increase: "(c1, s1, m1) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c2, s2, m2) \<Longrightarrow> finite (range s1)
   \<Longrightarrow> Max (range s2) \<le> 2 * (max (Max (range s1)) (max_constant c1))"
@@ -209,7 +127,7 @@ qed auto
 text \<open> We show that there always is a linear bound for the memory consumption. \<close>
 
 lemma linear_bound: "(c1, s1) \<Rightarrow>\<^sub>G\<^bsup>t\<^esup> s2 \<Longrightarrow> finite (range s1)
-  \<Longrightarrow> is_memory_bound c1 s1 ((num_variables c1) 
+  \<Longrightarrow> is_memory_bound_GC c1 s1 ((num_variables c1) 
       * (t + bit_length (max 1 (max (Max (range s1)) (max_constant c1)))))"
 proof -
   let ?b = "(num_variables c1) 
@@ -245,8 +163,20 @@ proof -
       using num_variables_not_increasing[OF \<open>(c1, s1, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup>t'\<^esup> (c', s', 0)\<close>] order_trans
       by(fastforce simp: bit_length_of_power_of_two)
   qed
-  thus ?thesis by(auto simp: is_memory_bound_def)
+  thus ?thesis by(auto simp: is_memory_bound_GC_def)
 qed
+
+lemma linear_bound': "(c1, s1) \<Rightarrow>\<^sub>G\<^bsup>t\<^esup> s2 \<Longrightarrow> (c1, s1) \<rightarrow>\<^bsup>t'\<^esup> (SKIP,s2) \<Longrightarrow> finite (range s1)
+  \<Longrightarrow> is_memory_bound c1 s1 ((num_variables c1) 
+      * (Suc t' + bit_length (max 1 (max (Max (range s1)) (max_constant c1)))))"
+  by (meson Memory.linear_bound small_to_big)
+
+corollary linear_bound'_atomic: "(c1, s1) \<Rightarrow>\<^sub>G\<^bsup>t\<^esup> s2 \<Longrightarrow> (c1, s1) \<rightarrow>\<^bsup>t'\<^esup> (SKIP,s2) \<Longrightarrow> finite (range s1)
+  \<Longrightarrow> is_memory_bound_GC c1 s1 ((num_variables c1) 
+      * (Suc t' + bit_length (max 1 (max (Max (range s1)) (max_constant c1)))))"
+  using linear_bound' memory_bound_to_small_step by blast
+
+lemma small_steps_of_GC: "(c1, s1) \<Rightarrow>\<^sub>G\<^bsup>t\<^esup> s2 \<Longrightarrow> \<exists>t' . (c1, s1) \<rightarrow>\<^bsup>t'\<^esup> (SKIP,s2) \<and> t' *  "
 
 end
 end

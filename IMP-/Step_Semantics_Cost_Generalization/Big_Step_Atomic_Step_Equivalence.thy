@@ -259,6 +259,6 @@ proof(rule ccontr)
         \<open>(c, s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup>t'\<^esup> (c'', s'',0)\<close>
     by fastforce
 qed
-end
 
+end
 end

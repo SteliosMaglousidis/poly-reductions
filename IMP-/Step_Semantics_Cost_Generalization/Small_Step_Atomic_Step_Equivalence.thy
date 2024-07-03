@@ -54,7 +54,10 @@ lemma atomic_step_cost :
 "(c, s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (next_small_step c s, s', m) \<Longrightarrow> m = step_cost c s"
   by (induction c s arbitrary: s' m rule: next_small_step.induct) auto
 
-(*
+lemma atomic_to_small1':
+"(c, s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c', s', m') \<Longrightarrow> (c, s) \<rightarrow> (c',s')"
+  by (induction c s arbitrary: c' s' rule: step_cost.induct) auto (* ? ? ? *)
+
 lemma atomic_to_small: "(c, s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> Suc (step_cost c s) \<^esup> (c', s', 0) \<Longrightarrow> (c, s) \<rightarrow> (c',s')"
 proof (induction c s arbitrary: s' c' rule: step_cost.induct)
   case (1 s)
@@ -67,9 +70,9 @@ next
     by (metis "2" Pair_inject atomic_step_t_deterministic small_step.Assign) 
 next
   case (3 c1 c2 s)
-  then show ?case sorry
+  then show ?case 
+    by (metis Pair_inject atomic_next atomic_step_t_deterministic atomic_to_small1' small_to_atomic_helper)
 qed auto
-*)
 
 lemma atomic_imp_small: "(c, s, m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c', s', m') \<Longrightarrow> (s = s' \<or> (c, s) \<rightarrow> (c',s'))"
   apply (induction c s m c' s' m' rule: atomic_step_GC_induct) apply auto
@@ -87,7 +90,7 @@ text "Equivalence statement. We have a difference of 1 between big step and smal
 because in small step semantics, we count the number of times transformation rules have to be applied
 until a configuration (SKIP, s') is reached, while in big step semantics the time for each step including
 the last command is fully considered."
-(*
+
 lemma equiv_atomic_small_pair:
  "(c,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> Suc (step_cost c s) \<^esup> (c',s',0) \<longleftrightarrow> (c, s) \<rightarrow> (c',s')"
   using small_to_atomic_helper atomic_to_small by metis
@@ -96,7 +99,43 @@ lemma equiv_atomic_small:
  "(c,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> Suc (step_cost c s) \<^esup> (c',s',0) = (c, s) \<rightarrow> (c',s')"
   using equiv_atomic_small_pair by blast
 
+lemma atomic_small_same_comp: "(c,s,m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> t \<^esup> (c',s',m') \<Longrightarrow> \<exists>t'. (c,s) \<rightarrow>\<^bsup> t' \<^esup> (c',s')"
+proof(induction t arbitrary: c s m c' s' m')
+  case 0
+  then show ?case by auto
+next
+  case (Suc t)
+  from \<open>(c, s, m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup>Suc t\<^esup> (c', s', m')\<close> obtain c'' s'' m'' where
+      \<open>(c, s, m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c'',s'',m'')\<close>  \<open>(c'', s'', m'') \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup>t\<^esup> (c', s', m')\<close>
+    by auto
+  from Suc.IH[OF \<open>(c'', s'', m'') \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup>t\<^esup> (c', s', m')\<close>] obtain t' where
+    \<open>(c'', s'') \<rightarrow>\<^bsup>t'\<^esup> (c', s')\<close> by auto
+  from atomic_imp_small[OF \<open>(c, s, m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c'',s'',m'')\<close>]
+  have \<open>s = s'' \<or> (c, s) \<rightarrow> (c'', s'')\<close> by auto
+  then show ?case proof(cases "s = s''")
+    case True
+    then show ?thesis 
+      by (metis \<open>(c'', s'') \<rightarrow>\<^bsup>t'\<^esup> (c', s')\<close> \<open>(c, s, m) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A (c'', s'', m'')\<close> atomic_backtrack1 atomic_step atomic_to_small1' local.deterministic rel_pow.step)
+  next
+    case False
+    from False \<open>s = s'' \<or> (c, s) \<rightarrow> (c'', s'')\<close> have \<open>(c, s) \<rightarrow> (c'', s'')\<close> by simp
+    then show ?thesis 
+      using \<open>\<exists>t'. (c'', s'') \<rightarrow>\<^bsup>t'\<^esup> (c', s')\<close> by auto
+  qed
+qed
 
+lemma small_atomic_same_comp: "(c,s) \<rightarrow>\<^bsup> t \<^esup> (c',s') \<Longrightarrow> \<exists>t'. (c,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> t' \<^esup> (c',s',0)"
+proof(induction t arbitrary: c s c' s')
+  case 0
+  then show ?case by auto
+next
+  case (Suc t)
+  then show ?case apply auto 
+    by (meson rel_pow_sum small_to_atomic_helper)
+qed
+
+
+(*
 lemma atomic_step_cant_run_longer_than_big_step: "(c, s) \<Rightarrow>\<^sub>G\<^bsup> t \<^esup> s' \<Longrightarrow> (c, s, 0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> t' \<^esup> (c'', s'',0)
   \<Longrightarrow> t' \<le> t"
 proof(rule ccontr)
