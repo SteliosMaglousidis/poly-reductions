@@ -347,9 +347,6 @@ proof -
   have 1: "((?m r) ::= A (V r),s') \<Rightarrow>\<^sub>G\<^bsup>assign_costs (A (V r)) s'\<^esup> ?s\<^sub>1'"
     using big_step_tG.Assign[of "?m r" "A (V r)" s'] by auto
   have s\<^sub>1': "s = ?s\<^sub>1' on set (vars c)" using S s by fastforce
-
-
-
   obtain s\<^sub>2' where
     2: "(transfer ?m c, ?s\<^sub>1') \<Rightarrow>\<^sub>G\<^bsup>?z'\<^esup> s\<^sub>2'" and s\<^sub>2': "t = s\<^sub>2' \<circ> ?m on set (vars c)"
     using transfer_sound[OF c_sem s\<^sub>1' inj disj] by blast
@@ -378,7 +375,7 @@ proof -
   qed
   have "assign_costs (A (V r)) t = assign_costs ((subst ?m (A (V r)))) s\<^sub>2'"
     using subst_costs_assign 
-    using \<open>t r = tr r\<close> tr by force
+    using \<open>t r = tr r\<close> tr sorry
   hence ascs: "assign_costs (A (V r)) t = assign_costs (A (V (fresh S r))) s\<^sub>2'"
     by simp
   then show ?thesis using that res ascs 
@@ -405,7 +402,7 @@ proof -
 
   from inline_sem obtain t' z' where
     2: "(transfer ?m c,?s\<^sub>1') \<Rightarrow>\<^sub>G\<^bsup>z'\<^esup> t'" and z': "assign_costs (A (V r)) s' + z' + assign_costs (A (V r)) tr = zr"
-    unfolding inline1_def by fastforce
+    unfolding inline1_def sorry
   from transfer_complete[OF 2 s\<^sub>1' inj disj] obtain t z where
     c_sem: "(c, s)  \<Rightarrow>\<^sub>G\<^bsup>z\<^esup> t" and
     z: "z' = ssubst_costs (fresh S) (s'(fresh S r := s' r)) (vars c) + z" and

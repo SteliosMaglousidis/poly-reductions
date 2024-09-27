@@ -154,5 +154,9 @@ proof(rule ccontr)
     by fastforce
 qed
 *)
+
+corollary small_atomic_same_comp': "\<exists>t. (c,s) \<rightarrow>\<^bsup> t \<^esup> (c',s') \<equiv> \<exists>t'. (c,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> t' \<^esup> (c',s',0)"
+  by (smt (verit) atomic_small_same_comp small_atomic_same_comp)
+
 end
 end

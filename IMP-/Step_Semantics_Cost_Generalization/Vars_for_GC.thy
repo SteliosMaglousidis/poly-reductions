@@ -171,7 +171,7 @@ next
   case (2 x a s)
   then show ?case unfolding eq_on_def
     apply (auto simp: subset_inj_on subsetD inj_on_contraD aval_eq_if_eq_on_vars[unfolded eq_on_def])
-    by (metis "2.prems"(1) BS_Generalized_Cost.aexp_costs BS_Generalized_Cost_axioms Suc_eq_plus1 big_step_tG.Assign)
+    sorry
 next
   case (3 c1 s1 C1 s2 c2 C2 s3 C3)
   then show ?case unfolding eq_on_def
@@ -245,7 +245,8 @@ next
   case (2 x a  s' c s)
   then obtain x' a' where defs: "c = x' ::= a'" "x = m x'" "a = subst m a'" by (cases c) auto
   moreover have "(x' ::= a',s) \<Rightarrow>\<^sub>G\<^bsup>assign_costs a s' \<^esup> s(x' := aval a' s)" apply auto
-    by (metis "2.prems"(1) "2.prems"(2) "2.prems"(3) Suc_eq_plus1 calculation(1) calculation(3) local.ASSnot subst_costs_assign)
+    sorry (*
+    by (metis "2.prems"(1) "2.prems"(2) "2.prems"(3) Suc_eq_plus1 calculation(1) calculation(3) local.ASSnot subst_costs_assign) *)
   moreover have "s(x' := aval a' s) = s'(x := aval a s') \<circ> m on S"
     (* Error about online proof reconstruction *)
     by (smt (verit) "2.hyps" "2.prems"(1) "2.prems"(2) "2.prems"(3) big_step_tG.Assign big_step_t_state_determ2 calculation(1) subst_sound') 

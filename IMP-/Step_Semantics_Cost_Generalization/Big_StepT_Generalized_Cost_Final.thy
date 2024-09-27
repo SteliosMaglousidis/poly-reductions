@@ -14,6 +14,7 @@ text "In IMP- Branching is only based on whether a variable's value equals 0."
 locale BS_Generalized_Cost =
   fixes skip_cost :: "state \<Rightarrow> nat" and 
       value_cost :: "nat \<Rightarrow> nat"
+      (* Does it make sense? Shouldn't <> have skip_costs = 1 *)
     assumes skip_cost_pos: "\<And> s. skip_cost s > 0"
       (* Not sure if too restricting. Fits with the assign cost model*)
     assumes skip_cost_var_names: "\<And> s a x y. skip_cost (s(x := aval a s)) = skip_cost (s(y := aval a s))"
@@ -502,6 +503,7 @@ method dest_com_gen_time =
 
 definition big_step_tG_concrete_cost :: "(com \<times> state \<Rightarrow> ('a \<Rightarrow> nat) \<Rightarrow> state \<Rightarrow> bool) \<Rightarrow> 'a \<Rightarrow> (com \<times> state \<Rightarrow> ('a \<Rightarrow> nat) \<Rightarrow> state \<Rightarrow> nat option)" where
  "big_step_tG_concrete_cost bs x \<equiv> (\<lambda>cs C s. (if bs cs C s then Some (C x) else None))"
+
 
 end
 

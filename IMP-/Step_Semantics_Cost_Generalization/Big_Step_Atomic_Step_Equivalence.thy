@@ -260,5 +260,16 @@ proof(rule ccontr)
     by fastforce
 qed
 
+
+lemma big_small_step_same_comp: "\<exists>t. (c,s) \<Rightarrow>\<^bsup> t \<^esup> s' \<equiv> \<exists>t'. (c,s) \<rightarrow>\<^bsup> t' \<^esup> (SKIP,s')"
+using equiv_small_big 
+  by (smt (verit, best) Big_StepT.bigstep_progress less_imp_Suc_add)
+
+lemma bigG_atomic_step_same_comp: "\<exists>t'. (c,s,0) \<rightarrow>\<^sub>G\<^sub>C\<^sub>A\<^bsup> t' \<^esup> (SKIP,s',0) \<equiv> \<exists>t'. (c,s) \<Rightarrow>\<^sub>G\<^bsup> t' \<^esup> s'"
+  by (smt (verit) at_least_skip_costs atomic_to_big local.big_to_small)
+
+lemma big_step_tG_t_same_comp: "\<exists>t'. (c,s)  \<Rightarrow>\<^bsup> t' \<^esup> s' \<equiv> \<exists>t'. (c,s) \<Rightarrow>\<^sub>G\<^bsup> t' \<^esup> s'"
+  using small_atomic_same_comp' big_small_step_same_comp bigG_atomic_step_same_comp by simp
+
 end
 end
