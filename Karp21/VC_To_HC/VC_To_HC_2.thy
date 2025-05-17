@@ -1,8 +1,8 @@
 theory VC_To_HC_2
   imports
-    Definitions_HC "../VC_Set_To_VC_List/VC_Set_To_VC_List" "Poly_Reductions_Lib.Graph_Auxiliaries"
+    HC_Definitions
+    VC_Set_To_VC_List
 begin
-
 
 subsection\<open>\<open>vc_hc (E, k) f \<in> hc \<longrightarrow> (E,k) \<in> VC\<close>\<close>
 
@@ -257,7 +257,7 @@ next
 qed
 
 (* TODO: similar theorem in HC_To_UHC - refactor! *)
-lemma hd_last_Cycle: 
+lemma hd_last_Cycle:
   assumes "Cycle \<noteq> []" "card (verts G) > 1"
   shows "hd Cycle = last Cycle"
 proof (cases "length Cycle = 1")

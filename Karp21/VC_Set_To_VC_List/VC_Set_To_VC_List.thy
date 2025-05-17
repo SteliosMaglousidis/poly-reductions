@@ -1,6 +1,12 @@
 theory VC_Set_To_VC_List
-  imports Main "../Three_Sat_To_Set_Cover"  "Poly_Reductions_Lib.Graph_Auxiliaries"
+  imports
+    Graph_Auxiliaries
+    IS_Definition
+    Reductions
+    VC_Definition
 begin
+
+(*FIXME: should be subsumed by VC_Definition_List*)
 
 section\<open>VC Set to VC List\<close>
 
@@ -116,9 +122,8 @@ qed
 
 lemma in_vc_list: "vc_set_to_vc_list (E, k) \<in> vertex_cover_list"
 proof -
-  have "\<exists>V. ugraph E \<and> V \<subseteq> \<Union> E \<and> k \<le> card (\<Union> E) \<and> card V \<le> k \<and> is_vertex_cover E V"
-    using in_vc
-    by(auto simp add: vertex_cover_def)
+  have "\<exists>V \<in> Pow (\<Union>E). ugraph E \<and> k \<le> card (\<Union> E) \<and> card V \<le> k \<and> is_vertex_cover E V"
+    using in_vc by (auto simp: is_vertex_cover_def vertex_cover_pred_def)
   then obtain V where V_def: "ugraph E" "V \<subseteq> \<Union> E" "k \<le> card (\<Union> E)"
     "card V \<le> k" "is_vertex_cover E V"
     by auto
@@ -165,7 +170,7 @@ proof -
   then show ?thesis
     using distinct_E' vertex_cover_list_def E'_def \<open>vc_set_to_vc_list (E, k) = (set_to_list E, k)\<close>
       is_vertex_cover
-    by fastforce
+    by auto
 qed
 
 end
@@ -278,8 +283,7 @@ proof -
     by blast
 qed
 
-theorem is_reduction_vc:
-  "is_reduction vc_set_to_vc_list vertex_cover vertex_cover_list"
+theorem is_reduction_vc: "is_reduction vc_set_to_vc_list vertex_cover vertex_cover_list"
   unfolding is_reduction_def using in_vc_list in_vc_list_implies_in_vc_set by auto
 
 end

@@ -1,15 +1,16 @@
-\<^marker>\<open>creator Florian Keßler, adpated by Mohammad Abdulaziz\<close>
+\<^marker>\<open>creator Florian Keßler\<close>
 
-section \<open>IMP-- Subprograms\<close>
+section \<open>IMP- Subprograms\<close>
 
-theory IMP_Minus_Subprograms imports "Small_StepT"
+theory IMP_Minus_Subprograms
+  imports IMP_Minus_Small_StepT
 begin
 
-text \<open>We give functions that enumerate all subprograms of an IMP-- program, that is, all 
-  computations that could be reached during the execution of an IMP-- program. Note that this is 
+text \<open>We give functions that enumerate all subprograms of an IMP- program, that is, all 
+  computations that could be reached during the execution of an IMP- program. Note that this is 
   a purely syntactical definition, i.e. we also take into account executions that are actually 
-  impossible to reach due to the semantics of IMP--. We show completeness of this definition,
-  i.e. if a IMP-- program can reach a certain computation, than that computation is contained in
+  impossible to reach due to the semantics of IMP-. We show completeness of this definition,
+  i.e. if a IMP- program can reach a certain computation, than that computation is contained in
   our definition. \<close>
 
 fun all_subprograms :: "com \<Rightarrow> com list" where
@@ -145,5 +146,43 @@ lemma enumerate_subprograms_enumerate_variables: "c' \<in> set (enumerate_subpro
   \<Longrightarrow> set (enumerate_variables c') \<subseteq> set (enumerate_variables c)" 
  by (auto simp: enumerate_variables_def) 
      (metis enumerate_subprograms_def enumerate_subprograms_transitive set_remdups)
+
+lemma step_doesnt_add_variables: "(c1, s1) \<rightarrow> (c2, s2) \<Longrightarrow> c1 \<in> set (enumerate_subprograms c)
+  \<Longrightarrow> dom s1 = set (enumerate_variables c)
+  \<Longrightarrow> dom s2 = set (enumerate_variables c)"
+proof (induction c1 s1  c2 s2 rule: small_step_induct)
+  case (Assign x a s)
+  have "x \<in> set (enumerate_variables (x ::= a))" by simp
+  then have "x \<in> set (enumerate_variables c)" 
+    using Assign enumerate_subprograms_enumerate_variables by fastforce
+  thus ?case using Assign by(auto simp: dom_def)
+next
+  case (Seq2 c\<^sub>1 s c\<^sub>1' s' c\<^sub>2)
+  have "c\<^sub>1 \<in> set (enumerate_subprograms (c\<^sub>1 ;; c\<^sub>2))" using c_in_all_subprograms_c by simp
+  then have "c\<^sub>1 \<in> set (enumerate_subprograms c)" 
+    using Assign Seq2 enumerate_subprograms_transitive by blast
+  then show ?case using Seq2 by auto
+qed auto
+
+
+lemma small_step_fun_restrict_variables: 
+  "set (enumerate_variables c1) \<subseteq> S \<Longrightarrow> small_step_fun (c1, s1 |` S) 
+    = (fst (small_step_fun (c1, s1)), snd (small_step_fun (c1, s1)) |` S)" 
+  apply(induction c1 arbitrary: S)
+  using subsetD by(fastforce simp: set_enumerate_variables_seq 
+      set_enumerate_variables_if set_enumerate_variables_while)+
+
+lemma small_step_fun_doesnt_add_variables:
+  "set (enumerate_variables c1) \<subseteq> S 
+  \<Longrightarrow> set (enumerate_variables (fst (small_step_fun (c1, s1)))) \<subseteq> S"
+  apply(induction c1)
+  by(auto simp: set_enumerate_variables_seq 
+      set_enumerate_variables_if set_enumerate_variables_while)
+
+lemma t_small_step_fun_restrict_variables: 
+  "set (enumerate_variables c1) \<subseteq> S \<Longrightarrow> t_small_step_fun t (c1, s1 |` S) 
+    = (fst (t_small_step_fun t (c1, s1)), snd (t_small_step_fun t (c1, s1)) |` S)" 
+  apply(induction t arbitrary: c1 s1)
+  by(auto simp: small_step_fun_restrict_variables small_step_fun_doesnt_add_variables)
 
 end
