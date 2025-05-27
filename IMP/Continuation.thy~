@@ -10,7 +10,8 @@ inductive
 where
 rSkip: "c \<turnstile>\<^sub>L\<^sub>C (rSKIP,s) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> (s,None)" |
 rAssign: "c \<turnstile>\<^sub>L\<^sub>C (x ::= a,s) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(x := aval a s),None)" |
-rSeq: "\<lbrakk>c \<turnstile>\<^sub>L\<^sub>C (c1,s1) \<Rightarrow>\<^bsup>x \<^esup> (s2,r1) ; c \<turnstile>\<^sub>L\<^sub>C (c2,s2) \<Rightarrow>\<^bsup>y \<^esup> (s3,r2) ; z=x+y \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>L\<^sub>C (c1;;c2, s1) \<Rightarrow>\<^bsup>z \<^esup> (s3,r2)" |
+rlcvSeq1: "\<lbrakk>c \<turnstile>\<^sub>L\<^sub>C (c1,s1) \<Rightarrow>\<^bsup>x \<^esup> (s2,r) ; c \<turnstile>\<^sub>L\<^sub>C (c2,s2) \<Rightarrow>\<^bsup>y \<^esup> (s3,None) ; z=x+y \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>L\<^sub>C (c1;;c2, s1) \<Rightarrow>\<^bsup>z \<^esup> (s3,r)" |
+rlcvSeq2: "\<lbrakk>c \<turnstile>\<^sub>L\<^sub>C (c1,s1) \<Rightarrow>\<^bsup>x \<^esup> (s2,r) ; c \<turnstile>\<^sub>L\<^sub>C (c2,s2) \<Rightarrow>\<^bsup>y \<^esup> (s3,Some r') ; z=x+y \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>L\<^sub>C (c1;;c2, s1) \<Rightarrow>\<^bsup>z \<^esup> (s3,Some r')" |
 rIfTrue: "\<lbrakk> s b \<noteq> 0;  c \<turnstile>\<^sub>L\<^sub>C (c1,s) \<Rightarrow>\<^bsup>x \<^esup> (t,r); y=x+1 \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>L\<^sub>C (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^bsup>y \<^esup> (t,r)" |
 rIfFalse: "\<lbrakk> s b = 0; c \<turnstile>\<^sub>L\<^sub>C (c2,s) \<Rightarrow>\<^bsup>x \<^esup> (t,r); y=x+1  \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>L\<^sub>C (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^bsup>y \<^esup> (t,r)" |
 rCall: "(C,s) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> c \<turnstile>\<^sub>L\<^sub>C (CALL C RETURN r,s) \<Rightarrow>\<^bsup>z \<^esup> (s(r:=t r), Some r)" |
@@ -60,11 +61,17 @@ lemma last_call_vars: "d \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup
 
 lemma last_call_sound: "d \<turnstile>\<^sub>R (c,s) \<Rightarrow>\<^bsup>z \<^esup> t  
   \<Longrightarrow> \<exists> r. d \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup>z \<^esup> (t,r)"
-  by (induction d c s z t rule: rbig_step_t_induct) fastforce+
+  apply (induction d c s z t rule: rbig_step_t_induct) try
+        apply blast
+       apply blast 
+      apply (metis not_Some_eq rlcvSeq1 rlcvSeq2)
+  by blast+
 
 lemma last_call_complete: "d \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup>z \<^esup> (t,r)
   \<Longrightarrow> d \<turnstile>\<^sub>R (c,s) \<Rightarrow>\<^bsup>z \<^esup> t"
   by (induction d c s z t r rule: rlast_call_induct) fastforce+
+
+
 
 inductive
   rlast_call_val :: "rcom \<Rightarrow> rcom \<times> state \<Rightarrow> nat \<Rightarrow> state \<times> val option \<Rightarrow> bool" ("_ \<turnstile>\<^sub>L\<^sub>C\<^sub>V _ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
@@ -141,14 +148,6 @@ lemma lcv_no_call: "c' \<turnstile>\<^sub>R (c,s) \<Rightarrow>\<^bsup>z \<^esup
 
 lemma lcv_deterministic: "c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,v) \<Longrightarrow> c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z' \<^esup> (t,v') \<Longrightarrow> z = z' \<and> v = v'"
 proof (induction c' c s z t v arbitrary: v' z' rule: rlast_call_val_induct)
-  case (rlcvSkip c s)
-  then show ?case 
-    by blast
-next
-  case (rlcvAssign c x a s)
-  then show ?case 
-    by blast
-next
   case (rlcvSeq1 c c1 s1 x s2 v c2 y s3 z)
   then show ?case proof (cases v')
     case None
@@ -160,7 +159,7 @@ next
        case (Some a)  
        have \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c1;; c2, s1) \<Rightarrow>\<^bsup>z\<^esup>  (s3, None)\<close>
          using None rlcvSeq1.prems 
-         by (metis lcv_sound rbig_step_t.rSeq  rlcvSeq1.hyps(1,2,3))
+         by (metis lcv_sound rbig_step_t.rSeq rdeterministic rlcvSeq1.hyps(1,2,3))
        hence \<open>v = None\<close> using rlcvSeq_tE1 
          by (metis lcv_sound rdeterministic rlcvSeq1.IH(1) rlcvSeq1.hyps(1))
        then show ?thesis 
@@ -169,8 +168,84 @@ next
   next
     case (Some a)
     then show ?thesis 
+      by (smt (verit) lcv_sound option.distinct(1) rdeterministic rlcvSeq1.IH(1,2) rlcvSeq1.hyps(1,3)
+          rlcvSeq1.prems rlcvSeq_tE2)
   qed
-   
+next
+  case (rlcvSeq2 c c1 s1 x s2 v c2 y s3 v'a z)
+  then show ?case proof (cases v')
+    case None
+     then show ?thesis proof(cases v)
+       case None
+       then show ?thesis using \<open>v = None\<close> \<open>v' = None\<close>     
+         by (metis lcv_sound option.simps(3) rdeterministic rlcvSeq2.IH(2) rlcvSeq2.hyps(1) rlcvSeq2.prems
+             rlcvSeq_tE1)
+     next
+       case (Some a)  
+       have \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c1;; c2, s1) \<Rightarrow>\<^bsup>z\<^esup>  (s3, None)\<close>
+         using None rlcvSeq2.prems 
+         by (metis lcv_sound rbig_step_t.rSeq rdeterministic rlcvSeq2.hyps(1,2,3))
+       hence \<open>v = None\<close> using rlcvSeq_tE1 
+         by (metis lcv_sound rdeterministic rlcvSeq2.IH(1) rlcvSeq2.hyps(1))
+       then show ?thesis 
+         by (simp add: Some)
+     qed
+  next
+    case (Some a)
+    then show ?thesis 
+      by (smt (verit) lcv_sound option.distinct(1) rdeterministic rlcvSeq2.IH(1,2) rlcvSeq2.hyps(1,3)
+          rlcvSeq2.prems rlcvSeq_tE2)
+  qed
+next
+  case (rlcvIfTrue s b c c1 x t v y c2)
+  then show ?case 
+    by fastforce
+next
+  case (rlcvIfFalse s b c c2 x t v y c1)
+  then show ?case (*sledgehammer beats try*)
+    by (metis Suc_eq_plus1 less_numeral_extra(3) rlcvIf_tE)
+next
+  case (rlcvCall C s z t c r)
+  then show ?case 
+    using bigstep_det by blast
+qed blast+
+
+lemma no_last_call_value1: "c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, v) \<Longrightarrow> v = None \<Longrightarrow> c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,None)"
+  by (induction c' c s z t v rule: rlast_call_val_induct) blast+
+
+lemma no_last_call_value2: "c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, r) \<Longrightarrow> r = None \<Longrightarrow> c'\<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,None)"
+  by (induction c' c s z t r rule: rlast_call_induct) blast+
+
+lemma no_last_call_value: "c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, None) \<equiv> c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, None)"
+  using no_last_call_value1 no_last_call_value2  by (smt (verit))
+
+lemma last_call_value1: "c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, v) \<Longrightarrow> v = Some val \<Longrightarrow> \<exists>r. c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,Some r)"
+  apply (induction c' c s z t v arbitrary: val rule: rlast_call_val_induct)
+  apply simp 
+        apply simp
+  using no_last_call_value1 apply blast
+      apply (meson last_call_sound lcv_sound rlast_call.rlcvSeq2)
+  by blast+
+
+lemma last_call_value2: "c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, r) \<Longrightarrow> r = Some var \<Longrightarrow> \<exists>v. c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,Some v)"
+  apply (induction c' c s z t r arbitrary: var rule: rlast_call_induct)
+  apply simp 
+        apply simp
+  apply (metis no_last_call_value rlast_call_val.rlcvSeq1)
+      apply (meson last_call_sound lcv_sound rlast_call.rlcvSeq2)
+      apply (meson last_call_complete lcv_complete rlast_call_val.rlcvSeq2)
+  by blast+
+
+lemma last_call_value: "c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, v) \<Longrightarrow> v = Some val\<Longrightarrow>c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, Some r) \<Longrightarrow> t r = val"
+proof (induction c' c s z t v arbitrary: val r rule: rlast_call_val_induct)
+  case (rlcvSkip c s)
+  then show ?case sorry
+next
+  case (rlcvAssign c x a s)
+  then show ?case sorry
+next
+  case (rlcvSeq1 c c1 s1 x s2 v c2 y s3 z)
+  then show ?case sorry
 next
   case (rlcvSeq2 c c1 s1 x s2 v c2 y s3 v' z)
   then show ?case sorry
@@ -189,26 +264,32 @@ next
 qed
 
 
-lemma lcv_seq_None[simp]: assumes " c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c1;; c2, s1) \<Rightarrow>\<^bsup>z\<^esup>  (s3, None) "
-  shows " \<exists>x. c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c1, s1) \<Rightarrow>\<^bsup>x\<^esup>  (s2, None)"
-proof-
-  have "c \<turnstile>\<^sub>R (c1;; c2, s1) \<Rightarrow>\<^bsup>z\<^esup>  s3"
-    using assms lcv_sound by auto
-  then obtain s2 x y where \<open>c \<turnstile>\<^sub>R (c1, s1) \<Rightarrow>\<^bsup>x\<^esup>  s2\<close> \<open>c \<turnstile>\<^sub>R (c2, s2) \<Rightarrow>\<^bsup>y\<^esup>  s3\<close> \<open> z=x+y\<close>
-    by blast
-  then obtain v1 v2 where \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c1, s1) \<Rightarrow>\<^bsup>x\<^esup>  (s2,v1)\<close> \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c2, s2) \<Rightarrow>\<^bsup>y\<^esup>  (s3,v2)\<close>
-    using lcv_complete by presburger
-  then show ?thesis proof(cases v2)
-    case None
-    have \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c1;; c2, s1) \<Rightarrow>\<^bsup>z\<^esup>  (s3, v1)\<close>
-      using None \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c1, s1) \<Rightarrow>\<^bsup>x\<^esup> (s2, v1)\<close> \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c2, s2) \<Rightarrow>\<^bsup>y\<^esup> (s3, v2)\<close> \<open>z = x + y\<close>
-      by blast
-    then show ?thesis sorry
-  next
-    case (Some a)
-    then show ?thesis sorry
-  qed
-
+lemma last_call_value: "c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, v) \<Longrightarrow> c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,Some r) \<Longrightarrow> v = Some val \<Longrightarrow> t r = val"
+proof (induction c' c s z t v arbitrary: val r rule: rlast_call_val_induct)
+  case (rlcvSkip c s)
+  then show ?case sorry
+next
+  case (rlcvAssign c x a s)
+  then show ?case sorry
+next
+  case (rlcvSeq1 c c1 s1 x s2 v c2 y s3 z)
+  then show ?case sorry
+next
+  case (rlcvSeq2 c c1 s1 x s2 v c2 y s3 v' z)
+  then show ?case sorry
+next
+  case (rlcvIfTrue s b c c1 x t v y c2)
+  then show ?case sorry
+next
+  case (rlcvIfFalse s b c c2 x t v y c1)
+  then show ?case sorry
+next
+  case (rlcvCall C s z t c r)
+  then show ?case sorry
+next
+  case (rRec c s z t v)
+  then show ?case sorry
+qed
 
 lemma continuate_sound_no_calls: 
   "\<lbrakk> c' \<turnstile>\<^sub>R (c,s) \<Rightarrow>\<^bsup>z \<^esup> t; set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; r \<notin> S; c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,None)\<rbrakk>
@@ -223,7 +304,7 @@ next
         rlcvAssign vars_rcom.simps(1))
 next
   case (rSeq c c1 s1 x s2 c2 y s3 z)
-  then show ?case apply auto sorry
+  then show ?case apply auto 
 next
   case (rIfTrue s b c c1 x t y c2)
   then show ?case sorry
