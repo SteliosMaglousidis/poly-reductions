@@ -131,7 +131,7 @@ term "fibonacci \<equiv> (IF n=0 ON b THEN (r ::= A (N 0)) ELSE
                             (r2 ::= A (V r));;
                             (r ::= Plus (V r1) (V r2))))"
 
-term "fibonacci \<equiv> ((IF n=0 ON b THEN r ::= A (N 0) ;; pc ::= Plus (V pc) (N 1) ELSE 
+term "fibonacci_tail \<equiv> ((IF n=0 ON b THEN r ::= A (N 0) ;; pc ::= Plus (V pc) (N 1) ELSE 
                      (IF n=1 ON b THEN r ::= A (N 1) ;; pc ::= Plus (V pc) (N 1) ELSE 
                           (n ::= Sub (V n) (N 1)) ;;
                             IF pc=1 ON bc THEN 
@@ -145,9 +145,38 @@ term "fibonacci \<equiv> ((IF n=0 ON b THEN r ::= A (N 0) ;; pc ::= Plus (V pc) 
                               r ::= Plus (V r1) (V r2)
                               ;; pc ::= Plus (V pc) (N 1)
                              )ELSE push_all ;; CALL fib RETURN r
-                            )ELSE push_all ;; CALL fib RETURN r))) "
+                            )ELSE push_all ;; CALL fib RETURN r)))"
 
-(*n# = [0,1,2...,n] *)
+(* Looks as if there is no need to eliminate tail calls *)
+term "ackermann \<equiv> (IF m=0 ON b THEN (r ::= Plus (V n) (N 1)) ELSE 
+                     (IF n=0 ON b THEN 
+                                    m ::= Sub (V m) (N 1) ;;
+                                    n ::= Plus (V n) (N 1) ;;
+                                    CALL ACK RETURN r 
+                                  ELSE(
+                                    n ::= Sub (V n) (N 1) ;;
+                                    CALL ACK RETURN r ;;
+                                    r1 ::= A (V r) ;;
+                                    m ::= Sub (V m) (N 1) ;;
+                                    n ::= A (V r1) ;;
+                                    CALL ACK RETURN r )))"
+
+term "ackermann_trec \<equiv> (IF m=0 ON b THEN (r ::= Plus (V n) (N 1)) ;; pc ::= Plus (V pc) (N 1) ELSE 
+                         (IF n=0 ON b THEN 
+                            m ::= Sub (V m) (N 1) ;;
+                            n ::= A (N 1) ;;
+                            CALL ACK RETURN r 
+                          ELSE(
+                            n ::= Sub (V n) (N 1) ;;
+                            IF pc=1 ON bc THEN 
+                              pop_all ;;
+                              r1 ::= A (V r) ;;
+                              m ::= Sub (V m) (N 1) ;;
+                              n ::= A (V r1) ;; 
+                              CALL ACK RETURN r
+                            ELSE (
+                            push_all ;; 
+                            CALL ACK RETURN r))))"
 
  
 section \<open>Semantics for small-step-ish reasoning (loops)\<close>

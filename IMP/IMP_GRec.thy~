@@ -114,6 +114,12 @@ abbreviation if_equals_var ("(IF _/=_ ON _ THEN _/ ELSE _ )"  [0, 0, 0, 0, 61] 6
 abbreviation if_equals ("(IF _/=_ ON _ THEN _/ ELSE _ )"  [0, 0, 0, 0, 61] 61) where
 "if_equals x v b c1 c2  \<equiv> ((b ::= Sub (V x) (N v)) ;; (IF b\<noteq>0 THEN c1 ELSE c2))"
 
+abbreviation push_all where
+"push_all \<equiv> rSKIP"
+
+abbreviation pop_all where
+"pop_all \<equiv> rSKIP;;rSKIP"
+
 
 term "fibonacci \<equiv> (IF n=0 ON b THEN (r ::= A (N 0)) ELSE 
                      (IF n=1 ON b THEN (r ::= A (N 1)) ELSE 
@@ -125,15 +131,24 @@ term "fibonacci \<equiv> (IF n=0 ON b THEN (r ::= A (N 0)) ELSE
                             (r2 ::= A (V r));;
                             (r ::= Plus (V r1) (V r2))))"
 
-value "tree_to_rcom (rcom_tree_in_the_end (rcom_to_tree (IF n=0 ON b THEN r ::= A (N 0) ELSE ( 
-                     IF n=1 ON b THEN r ::= A (N 1) ELSE ( 
-                          n ::= Sub (V n) (N 1) ;;
-                            CALL fib RETURN r;;
-                            r1 ::= A (V r);;
-                            n ::= Sub (V n) (N 1) ;;
-                            CALL fib RETURN r;;
-                            r2 ::= A (V r);;
-                            r ::= Plus (V r1) (V r2))))) \<langle>\<langle>\<rangle>,rAssigntag adsad adsasd ,\<langle>\<rangle>\<rangle>)"
+term "fibonacci \<equiv> ((IF n=0 ON b THEN r ::= A (N 0) ;; pc ::= Plus (V pc) (N 1) ELSE 
+                     (IF n=1 ON b THEN r ::= A (N 1) ;; pc ::= Plus (V pc) (N 1) ELSE 
+                          (n ::= Sub (V n) (N 1)) ;;
+                            IF pc=1 ON bc THEN 
+                            (pop_all ;;
+                             r1 ::= A (V r) ;;
+                             n ::= Sub (V n) (N 1) ;;
+                             IF pc=2 ON bc THEN 
+                             (pop_all ;;
+                              pc ::= A(N 0);;
+                              r2 ::= A (V r);;
+                              r ::= Plus (V r1) (V r2)
+                              ;; pc ::= Plus (V pc) (N 1)
+                             )ELSE push_all ;; CALL fib RETURN r
+                            )ELSE push_all ;; CALL fib RETURN r))) "
+
+(*n# = [0,1,2...,n] *)
+
  
 section \<open>Semantics for small-step-ish reasoning (loops)\<close>
 text \<open>Big-step semantics that just returns true for Tail\<close>
