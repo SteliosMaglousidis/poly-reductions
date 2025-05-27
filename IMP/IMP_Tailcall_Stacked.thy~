@@ -29,7 +29,7 @@ abbreviation "pop_i i fs \<equiv> (if length (fs ! i) = 1  then remove_i i fs
 
 datatype
   tscom = tsSKIP
-      | Push  vname nat
+      | Push  nat nat
       | Pop  nat
       | tsAssign vname aexp
       | tsSeq    tscom  tscom
@@ -110,7 +110,6 @@ value "tree_to_stails (tree_cf (
      (IF n\<noteq>0 THEN 
                ((IF e\<noteq>0 THEN
                          ((CALL c RETURN r) ;;
-                         (r1 ::= A (V r)) ;;
                          (r1 ::= A (V r)))
                         ELSE
                          ((n ::= Sub (V n) (N 1)) ;; 

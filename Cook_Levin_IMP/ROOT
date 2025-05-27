@@ -47,7 +47,7 @@ session "IMP_To_SAS+_IMP" in "IMP_To_SAS+/IMP_To_SAS+_IMP" = "HOL-Analysis" +
     "Binary_Arithmetic_IMP"
     "IMP_To_IMP_Minus_State_Translations_IMP"
 *)
-(*session Cook_Levin_IMP in Cook_Levin_IMP = "HOL-Analysis" +
+session Cook_Levin_IMP in Cook_Levin_IMP = "HOL-Analysis" +
   sessions
     (*HOL_To_IMP*)
     "IMP"
@@ -66,4 +66,4 @@ session "IMP_To_SAS+_IMP" in "IMP_To_SAS+/IMP_To_SAS+_IMP" = "HOL-Analysis" +
     "IMP_To_SAS+/IMP_To_SAS_Plus"
     "IMP_To_SAS+/IMP_To_IMP-/Primitives_IMP"
     "IMP_To_SAS+/IMP_To_IMP-/IMP_To_IMP_Minus_State_Translations_IMP"
-    "IMP_To_SAS+/IMP_To_IMP-/Binary_Arithmetic_IMP"*)
+    "IMP_To_SAS+/IMP_To_IMP-/Binary_Arithmetic_IMP"

@@ -29,7 +29,7 @@ abbreviation "pop_i i fs \<equiv> (if length (fs ! i) = 1  then remove_i i fs
 
 datatype
   tscom = tsSKIP
-      | Push  nat nat
+      | Push  vname nat
       | Pop  nat
       | tsAssign vname aexp
       | tsSeq    tscom  tscom
@@ -105,6 +105,7 @@ fun tree_to_stails :: "rcom \<Rightarrow> nat \<Rightarrow> tscom" where
 "tree_to_stails (IF b\<noteq>0 THEN c1 ELSE c2) n = (IF b\<noteq>0 THEN tree_to_stails c1 n ELSE tree_to_stails c2 n)"|
 "tree_to_stails (CALL C RETURN r) n = tsSKIP"|
 "tree_to_stails (RECURSE) n = (tsTAIL)"
+
 
 value "tree_to_stails (tree_cf ( 
      (IF n\<noteq>0 THEN 
