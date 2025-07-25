@@ -54,70 +54,6 @@ next
   obtain c1 c2 where \<open>cr1 = continuate c1 r\<close> \<open>cr1 = continuate c2 r\<close>
     using \<open>cr1 ;; cr2 = continuate c r\<close> continuate.elims 
     sorry
-  then show ?case 
-next
-  case (rlcvSeq2 c c1 s1 x s2 v c2 y s3 v' z)
-  then show ?case sorry
-next
-  case (rlcvIfTrue s b c c1 x t v y c2)
-  then show ?case sorry
-next
-  case (rlcvIfFalse s b c c2 x t v y c1)
-  then show ?case sorry
-next
-  case (rlcvCall C s z t c r)
-  then show ?case sorry
-next
-  case (rRec c s z t v)
-  then show ?case sorry
-qed
-
-
-lemma last_call_value: 
-"\<lbrakk>(continuate c' r) \<turnstile>\<^sub>L\<^sub>C\<^sub>V ((continuate c r),s) \<Rightarrow>\<^bsup> z \<^esup> (t, v); v = Some val;
-  (continuate c' r) \<turnstile>\<^sub>L\<^sub>C ((continuate c r),s) \<Rightarrow>\<^bsup> z \<^esup> (t, Some r'); 
-  set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; r \<notin> S\<rbrakk>
-   \<Longrightarrow> t r = val"
-proof (induction c' c s z t v arbitrary: val r rule: rlast_call_val_induct)
-  case (rlcvSkip c s)
-  then show ?case by blast
-next
-  case (rlcvAssign c x a s)
-  then show ?case by blast
-next
-  case (rlcvSeq1 c c1 s1 x s2 v c2 y s3 z)
-  from \<open>c \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c2, s2) \<Rightarrow>\<^bsup>y\<^esup>  (s3, None)\<close> have \<open>c \<turnstile>\<^sub>L\<^sub>C (c2, s2) \<Rightarrow>\<^bsup>y\<^esup>  (s3, None)\<close>
-    by (simp add: no_last_call_value)
-  hence \<open>c \<turnstile>\<^sub>L\<^sub>C (c1, s1) \<Rightarrow>\<^bsup>x\<^esup>  (s2, Some r)\<close> 
-    by (metis last_call_value1 lc_deterministic rlcSeq1 rlcvSeq1.hyps(1) rlcvSeq1.prems(1,2))
-  then show ?case 
-next
-  case (rlcvSeq2 c c1 s1 x s2 v c2 y s3 v' z)
-  then show ?case sorry
-next
-  case (rlcvIfTrue s b c c1 x t v y c2)
-  then show ?case sorry
-next
-  case (rlcvIfFalse s b c c2 x t v y c1)
-  then show ?case sorry
-next
-  case (rlcvCall C s z t c r)
-  then show ?case sorry
-next
-  case (rRec c s z t v)
-  then show ?case sorry
-qed
-
-
-lemma last_call_value: "c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t, v) \<Longrightarrow> c' \<turnstile>\<^sub>L\<^sub>C (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,Some r) \<Longrightarrow> v = Some val \<Longrightarrow> t r = val"
-proof (induction c' c s z t v arbitrary: val r rule: rlast_call_val_induct)
-  case (rlcvSkip c s)
-  then show ?case sorry
-next
-  case (rlcvAssign c x a s)
-  then show ?case sorry
-next
-  case (rlcvSeq1 c c1 s1 x s2 v c2 y s3 z)
   then show ?case sorry
 next
   case (rlcvSeq2 c c1 s1 x s2 v c2 y s3 v' z)
@@ -135,6 +71,18 @@ next
   case (rRec c s z t v)
   then show ?case sorry
 qed
+
+
+lemma continuate_sound_calls: 
+  "\<lbrakk> c' \<turnstile>\<^sub>R (c,s) \<Rightarrow>\<^bsup>z \<^esup> t; set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; r \<notin> S; c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,Some v)\<rbrakk>
+  \<Longrightarrow>  \<exists>z'. continuate c' r \<turnstile>\<^sub>R (continuate c r, s) \<Rightarrow>\<^bsup> z'\<^esup> t(r:= v)"
+  apply (induction c' c s z t arbitrary: r v rule: rbig_step_t_induct)
+        apply blast+
+  subgoal sorry
+  subgoal sorry
+    apply fastforce
+  subgoal sorry
+  by fastforce
 
 lemma continuate_sound_no_calls: 
   "\<lbrakk> c' \<turnstile>\<^sub>R (c,s) \<Rightarrow>\<^bsup>z \<^esup> t; set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; r \<notin> S; c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,None)\<rbrakk>
@@ -149,7 +97,7 @@ next
         rlcvAssign vars_rcom.simps(1))
 next
   case (rSeq c c1 s1 x s2 c2 y s3 z)
-  then show ?case apply auto 
+  then show ?case apply auto sorry
 next
   case (rIfTrue s b c c1 x t y c2)
   then show ?case sorry
@@ -167,6 +115,7 @@ qed
 lemma continuate_sound: 
   "\<lbrakk> c' \<turnstile>\<^sub>R (c,s) \<Rightarrow>\<^bsup>z \<^esup> t; set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; r \<notin> S; c' \<turnstile>\<^sub>L\<^sub>C\<^sub>V (c,s) \<Rightarrow>\<^bsup> z \<^esup> (t,vo)\<rbrakk>
   \<Longrightarrow>  \<exists>z'. continuate c' r \<turnstile>\<^sub>R (continuate c r, s) \<Rightarrow>\<^bsup> z'\<^esup> t(r:= (if vo = Some v then v else s r))"
+  apply auto using continuate_sound_no_calls last_call_value sorry
 proof (induction c' c s z t arbitrary: vo v r rule: rbig_step_t_induct)
   case (rSkip c s)
   then show ?case by fastforce

@@ -15,6 +15,7 @@ fun pop :: "stack \<Rightarrow> stack" where
 fun push :: "stack \<Rightarrow> val \<Rightarrow> stack" where
 "push xs v = v#xs"
 
+(* The stack list construction may effect final language run time *)
 type_synonym fstack = "stack list"
 
 fun remove_i :: "nat \<Rightarrow> 'a list \<Rightarrow> 'a list" where
@@ -29,8 +30,8 @@ abbreviation "pop_i i fs \<equiv> (if length (fs ! i) = 1  then remove_i i fs
 
 datatype
   tscom = tsSKIP
-      | Push  nat nat
-      | Pop  nat
+      | Push  vname nat
+      | Pop  vname nat
       | tsAssign vname aexp
       | tsSeq    tscom  tscom
       | tsIf     vname tscom tscom
@@ -39,6 +40,8 @@ datatype
 
 open_bundle tscom_syntax begin
 notation tsAssign ("_ ::= _" [1000, 61] 61) and
+         Push ("_ ::\<Rightarrow> _" [1000, 61] 61) and
+         Pop ("_ \<Leftarrow>:: _" [1000, 61] 61) and
          tsSeq ("_;;/ _"  [60, 61] 60) and
          tsIf ("(IF _/\<noteq>0 THEN _/ ELSE _)"  [0, 0, 61] 61) and
          tsCall ("TCALL _ RETURN _")
@@ -48,16 +51,16 @@ unbundle no com'_syntax and rcom_syntax
 inductive
   tsbig_step_t :: "tscom \<Rightarrow> tscom \<times> state \<times> fstack \<Rightarrow> nat \<Rightarrow> state \<times> fstack \<Rightarrow> bool" ("_ \<turnstile> _ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
 where
-tsSkip: "c \<turnstile> (tsSKIP,s,ss) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> (s,ss)" |
-tsPush: "c \<turnstile>(Push v i,s,ss) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s, push_i i (s v) ss)" |
-tsPop: "c \<turnstile>(Pop i,s,ss) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s, pop_i i ss)" |
-tAssign: "c \<turnstile>(x ::= a,s,ss) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(x := aval a s),ss)" |
-tSeq: "\<lbrakk>c \<turnstile> (c1,s1,ss1) \<Rightarrow>\<^bsup>x \<^esup> (s2,ss2) ; c \<turnstile> (c2,s2,ss2) \<Rightarrow>\<^bsup>y \<^esup> (s3,ss3) ; z=x+y\<rbrakk> \<Longrightarrow> c \<turnstile> (c1;;c2, s1, ss1) \<Rightarrow>\<^bsup>z \<^esup> (s3,ss3)" |
-tIfTrue: "\<lbrakk>s b \<noteq> 0;  c \<turnstile> (c1,s,ss) \<Rightarrow>\<^bsup>x \<^esup> (t,st); y=x+1\<rbrakk> \<Longrightarrow> c \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s,ss) \<Rightarrow>\<^bsup>y \<^esup> (t,st)" |
-tIfFalse: "\<lbrakk>s b = 0; c \<turnstile> (c2,s,ss) \<Rightarrow>\<^bsup>x \<^esup> (t,st); y=x+1\<rbrakk> \<Longrightarrow> c \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s,ss) \<Rightarrow>\<^bsup>y \<^esup> (t,st)" |
-tCall: "(C,s) \<Rightarrow>\<^bsup> z \<^esup> t \<Longrightarrow> c \<turnstile> (TCALL C RETURN r,s,ss) \<Rightarrow>\<^bsup>z \<^esup> (s(r:=t r),ss)" |
+tsSkip: "c \<turnstile> (tsSKIP,s,stack) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> (s,stack)" |
+tAssign: "c \<turnstile>(x ::= a,s,stack) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(x := aval a s),stack)" |
+tsPush: "c \<turnstile>(v ::\<Rightarrow> i,s,stack) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s, push_i i (s v) stack)" |
+tsPop: "c \<turnstile>(v \<Leftarrow>:: i,s,stack) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(v := hd (stack ! i)), pop_i i stack)" |
+tSeq: "\<lbrakk>c \<turnstile> (c1,s1,stack1) \<Rightarrow>\<^bsup>x \<^esup> (s2,stack2) ; c \<turnstile> (c2,s2,stack2) \<Rightarrow>\<^bsup>y \<^esup> (s3,stack3) ; z=x+y\<rbrakk> \<Longrightarrow> c \<turnstile> (c1;;c2, s1, stack1) \<Rightarrow>\<^bsup>z \<^esup> (s3,stack3)" |
+tIfTrue: "\<lbrakk>s b \<noteq> 0;  c \<turnstile> (c1,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (t,stack'); y=x+1\<rbrakk> \<Longrightarrow> c \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s,stack) \<Rightarrow>\<^bsup>y \<^esup> (t,stack')" |
+tIfFalse: "\<lbrakk>s b = 0; c \<turnstile> (c2,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (t,stack'); y=x+1\<rbrakk> \<Longrightarrow> c \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s,stack) \<Rightarrow>\<^bsup>y \<^esup> (t,stack')" |
+tCall: "(C,s) \<Rightarrow>\<^bsup> z \<^esup> t \<Longrightarrow> c \<turnstile> (TCALL C RETURN r,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (s(r:=t r),stack)" |
 \<comment> \<open>New rule\<close>
-tTail: "c \<turnstile> (c,s,ss) \<Rightarrow>\<^bsup>z \<^esup> (t,ts) \<Longrightarrow> c \<turnstile> (tsTAIL,s,ss) \<Rightarrow>\<^bsup>5 + z \<^esup> (t,ts)"
+tTail: "c \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack') \<Longrightarrow> c \<turnstile> (tsTAIL,s,stack) \<Rightarrow>\<^bsup>5 + z \<^esup> (t,stack')"
 
 bundle tsbig_step_syntax
 begin
@@ -72,6 +75,8 @@ lemmas tsbig_step_t_induct = tsbig_step_t.induct[split_format(complete)]
 
 inductive_cases tSkip_tE[elim!]: "c \<turnstile> (tsSKIP,s) \<Rightarrow>\<^bsup>x \<^esup> t"
 inductive_cases tAssign_tE[elim!]: "c \<turnstile> (x ::= a,s) \<Rightarrow>\<^bsup>p \<^esup> t"
+inductive_cases Push_tE[elim!]: "c \<turnstile> (x ::\<Rightarrow> istack,s) \<Rightarrow>\<^bsup>p \<^esup> t"
+inductive_cases Pop_tE[elim!]: "c \<turnstile> (x \<Leftarrow>:: istack,s) \<Rightarrow>\<^bsup>p \<^esup> t"
 inductive_cases tSeq_tE[elim!]: "c \<turnstile> (c1;;c2,s1) \<Rightarrow>\<^bsup>p \<^esup> s3"
 inductive_cases tIf_tE[elim!]: "c \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s) \<Rightarrow>\<^bsup>x \<^esup> t"
 inductive_cases tCall_tE[elim!]: "c \<turnstile> (TCALL C RETURN v,s) \<Rightarrow>\<^bsup>z \<^esup> t"
@@ -84,6 +89,8 @@ begin
 
 fun vars_tscom :: "tscom \<Rightarrow> vname list" where
 "vars_tscom (x ::= a)  = x # vars a" |
+"vars_tscom (x ::\<Rightarrow> istack)  = [x]" |
+"vars_tscom (x \<Leftarrow>:: istack)  = [x]" |
 "vars_tscom (c\<^sub>1;;c\<^sub>2) = vars_tscom c\<^sub>1 @ vars_tscom c\<^sub>2" |
 "vars_tscom (IF b\<noteq>0 THEN c1 ELSE c2) = b # vars_tscom c1 @ vars_tscom c2" |
 "vars_tscom (TCALL c RETURN r) = r#vars c" |
@@ -100,11 +107,12 @@ fun tree_to_stails :: "rcom \<Rightarrow> nat \<Rightarrow> tscom" where
 "tree_to_stails rSKIP n = tsSKIP" |
 "tree_to_stails (x ::= a) n = (x ::= a)"|
 (* *)
-"tree_to_stails (CALL C RETURN r;; c2) n = (IF iflag n\<noteq>0 THEN (Pop n ;; (tree_to_stails c2 (n + 1)) ;; Push r (n + 1)) ELSE tsSKIP)"|
+"tree_to_stails (CALL C RETURN r;; c2) n = (IF iflag n\<noteq>0 THEN (Pop r n ;; (tree_to_stails c2 (n + 1)) ;; Push r (n + 1)) ELSE tsSKIP)"|
 "tree_to_stails (c1;;c2) n = (tree_to_stails c1 n ;; tree_to_stails c2 n)"|
 "tree_to_stails (IF b\<noteq>0 THEN c1 ELSE c2) n = (IF b\<noteq>0 THEN tree_to_stails c1 n ELSE tree_to_stails c2 n)"|
 "tree_to_stails (CALL C RETURN r) n = tsSKIP"|
 "tree_to_stails (RECURSE) n = (tsTAIL)"
+
 
 value "tree_to_stails (tree_cf ( 
      (IF n\<noteq>0 THEN 
@@ -140,15 +148,17 @@ lemma no_stails_invar[simp]: "\<not>stails c \<Longrightarrow> sinvar c"
 section \<open>Semantics for small-step-ish reasoning (loops)\<close>
 text \<open>Big-step semantics that just returns true for Tail\<close>
 inductive
-  stail_step :: "(tscom \<times> state) \<Rightarrow> nat \<Rightarrow> (state \<times> bool) \<Rightarrow> bool" ("\<turnstile>_ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
+  stail_step :: "(tscom \<times> state \<times> fstack) \<Rightarrow> nat \<Rightarrow> (state \<times> fstack \<times> bool) \<Rightarrow> bool" ("\<turnstile>_ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
 where
-Skip: "\<turnstile> (tsSKIP,s) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> (s,False)" |
-Assign: "\<turnstile>(x ::= a,s) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(x := aval a s),False)" |
-Seq: "\<lbrakk>\<turnstile> (c1,s1) \<Rightarrow>\<^bsup>x \<^esup> (s2, False); \<turnstile> (c2,s2) \<Rightarrow>\<^bsup>y \<^esup> (s3,CONT) ; z=x+y \<rbrakk> \<Longrightarrow> \<turnstile> (c1;;c2, s1) \<Rightarrow>\<^bsup>z \<^esup> (s3,CONT)" |
-IfTrue: "\<lbrakk> s b \<noteq> 0;  \<turnstile> (c1,s) \<Rightarrow>\<^bsup>x \<^esup> (t,CONT); y=x+1 \<rbrakk> \<Longrightarrow> \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^bsup>y \<^esup> (t,CONT)" |
-IfFalse: "\<lbrakk> s b = 0; \<turnstile> (c2,s) \<Rightarrow>\<^bsup>x \<^esup> (t,CONT); y=x+1  \<rbrakk> \<Longrightarrow> \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^bsup>y \<^esup> (t,CONT)" |
-Call: "(C,s) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> \<turnstile> (TCALL C RETURN r,s) \<Rightarrow>\<^bsup>z \<^esup> (s(r:=t r),False)" |
-Tail: "\<turnstile> (tsTAIL,s) \<Rightarrow>\<^bsup>5 \<^esup> (s,True)"
+tssSkip: "\<turnstile> (tsSKIP,s,stack) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> (s,stack,False)" |
+tssAssign: "\<turnstile>(x ::= a,s,stack) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(x := aval a s),stack, False)" |
+tssPush: "\<turnstile>(v ::\<Rightarrow> i,s,stack) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s,(push_i i (s v) stack), False)" |
+tssPop: "\<turnstile>(v \<Leftarrow>:: i,s,stack) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(v := hd (stack ! i)), pop_i i stack, False)" |
+tssSeq: "\<lbrakk>\<turnstile> (c1,s1,stack1) \<Rightarrow>\<^bsup>x \<^esup> (s2,stack2,False); \<turnstile> (c2,s2,stack2) \<Rightarrow>\<^bsup>y \<^esup> (s3,stack3,CONT) ; z=x+y \<rbrakk> \<Longrightarrow> \<turnstile> (c1;;c2,s1,stack1) \<Rightarrow>\<^bsup>z \<^esup> (s3,stack3,CONT)" |
+tssIfTrue: "\<lbrakk> s b \<noteq> 0;  \<turnstile> (c1,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (t,stack',CONT); y=x+1 \<rbrakk> \<Longrightarrow> \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s,stack) \<Rightarrow>\<^bsup>y \<^esup> (t,stack',CONT)" |
+tssIfFalse: "\<lbrakk> s b = 0; \<turnstile> (c2,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (t,stack',CONT); y=x+1  \<rbrakk> \<Longrightarrow> \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s,stack) \<Rightarrow>\<^bsup>y \<^esup> (t,stack',CONT)" |
+tssCall: "(C,s) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> \<turnstile> (TCALL C RETURN r,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (s(r:=t r),stack,False)" |
+tssTail: "\<turnstile> (tsTAIL,s,stack) \<Rightarrow>\<^bsup>5 \<^esup> (s,stack,True)"
 
 code_pred stail_step .
 
@@ -158,6 +168,8 @@ lemmas stail_step_induct = stail_step.induct[split_format(complete)]
 
 inductive_cases stailSkip_tE[elim!]: "\<turnstile> (tsSKIP,s) \<Rightarrow>\<^bsup>x \<^esup> (t,b)"
 inductive_cases stailAssign_tE[elim!]: "\<turnstile> (x ::= a,s) \<Rightarrow>\<^bsup>p \<^esup> (t,b)"
+inductive_cases stailPush_tE[elim!]: "\<turnstile> (x ::\<Rightarrow> stack,s) \<Rightarrow>\<^bsup>p \<^esup> (t,b)"
+inductive_cases stailPop_tE[elim!]: "\<turnstile> (x \<Leftarrow>:: stack,s) \<Rightarrow>\<^bsup>p \<^esup> (t,b)"
 inductive_cases stailSeq_tE[elim!]: "\<turnstile> (c1;;c2,s1) \<Rightarrow>\<^bsup>p \<^esup> (s3,b)"
 inductive_cases stailIf_tE[elim!]: "\<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2,s) \<Rightarrow>\<^bsup>x \<^esup> (t,CONT)"
 inductive_cases stailCall_tE[elim!]: "\<turnstile> (TCALL C RETURN v,s) \<Rightarrow>\<^bsup>z \<^esup> (t,b)"
@@ -166,10 +178,10 @@ inductive_cases stailTail_tE[elim]: "\<turnstile> (tsTAIL,s) \<Rightarrow>\<^bsu
 
 text \<open>Closure of tails\<close>
 inductive
-  stail_steps :: "tscom \<Rightarrow> tscom \<times> state \<Rightarrow> nat \<Rightarrow> state \<Rightarrow> bool" ("_ \<turnstile>''_ \<Rightarrow>\<^bsup>_\<^esup>  _" 55) for d
+  stail_steps :: "tscom \<Rightarrow> tscom \<times> state \<times> fstack \<Rightarrow> nat \<Rightarrow> state \<times> fstack  \<Rightarrow> bool" ("_ \<turnstile>''_ \<Rightarrow>\<^bsup>_\<^esup>  _" 55) for d
 where
-tFalse: "\<turnstile>(c,s) \<Rightarrow>\<^bsup>z \<^esup> (t,False) \<Longrightarrow> d \<turnstile>'(c,s)\<Rightarrow>\<^bsup>z \<^esup> t" |
-tTrue: "\<turnstile>(c,s1) \<Rightarrow>\<^bsup>x \<^esup> (s2,True) \<Longrightarrow> d \<turnstile>'(d,s2)\<Rightarrow>\<^bsup>y \<^esup> s3 \<Longrightarrow> d \<turnstile>'(c,s1)\<Rightarrow>\<^bsup>x+y \<^esup> s3"
+tFalse: "\<turnstile>(c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack',False) \<Longrightarrow> d \<turnstile>'(c,s,stack)\<Rightarrow>\<^bsup>z \<^esup> (t,stack')" |
+tTrue: "\<turnstile>(c,s1,stack1) \<Rightarrow>\<^bsup>x \<^esup> (s2,stack2,True) \<Longrightarrow> d \<turnstile>'(d,s2,stack2)\<Rightarrow>\<^bsup>y \<^esup> (s3,stack3) \<Longrightarrow> d \<turnstile>'(c,s1,stack1)\<Rightarrow>\<^bsup>x+y \<^esup> (s3,stack3)"
 
 code_pred stail_steps .
 
@@ -178,36 +190,117 @@ declare stail_steps.cases[elim]
 
 lemmas stail_steps_induct = stail_steps.induct[split_format(complete)]
 
-lemma no_tails_no_step: "\<turnstile>(c,s) \<Rightarrow>\<^bsup>z \<^esup> (t,b) \<Longrightarrow> \<not>stails c \<Longrightarrow> \<not>b"
-  by (induction c s z t b rule: stail_step_induct) auto
+lemma no_stails_no_step: "\<turnstile>(c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack',b) \<Longrightarrow> \<not>stails c \<Longrightarrow> \<not>b"
+  by (induction c s stack z t stack' b rule: stail_step_induct) auto
 
-lemma no_tails_sem: "\<turnstile>(c,s) \<Rightarrow>\<^bsup>z \<^esup> (t,b) \<Longrightarrow> \<not>stails c \<Longrightarrow> \<exists>ts .  d \<turnstile> (c,s,ss) \<Rightarrow>\<^bsup>z \<^esup> (t,ts)"
-  by (induction c s z t b arbitrary: ss rule: stail_step_induct) fastforce+
+lemma no_tails_sem: "\<turnstile>(c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack',b) \<Longrightarrow> \<not>stails c \<Longrightarrow>  d \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack')"
+proof (induction c s stack z t stack' b rule: stail_step_induct) 
+  case (tssSeq c1 s1 stack1 x s2 stack2 c2 y s3 stack3 CONT z)
+  then show ?case 
+    by auto
+next
+  case (tssIfTrue s b c1 stack x t stack' CONT y c2)
+  then show ?case 
+    by auto
+next
+  case (tssIfFalse s b c2 stack x t stack' CONT y c1)
+  then show ?case 
+    by auto
+next
+  case (tssTail s stack)
+  then show ?case 
+    by auto
+qed blast+
 
-lemma small_sound: "d \<turnstile> (c,s,ss) \<Rightarrow>\<^bsup>z \<^esup> (t,ts) \<Longrightarrow> sinvar c \<Longrightarrow> sinvar d \<Longrightarrow> d \<turnstile>' (c,s) \<Rightarrow>\<^bsup>z \<^esup> t"
-proof (induction d c s ss z t ts rule: tsbig_step_t_induct)
+lemma ts_deterministic: 
+  "d \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack') \<Longrightarrow> d \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z'\<^esup> (t',stack'') \<Longrightarrow> z = z' \<and> t = t' \<and> stack'' = stack'" 
+proof (induction d c s stack z t stack' arbitrary: z' t' stack'' rule: tsbig_step_t_induct)
+  case (tIfTrue s b c c1 stack x t stack' y c2)
+  then show ?case 
+    by fastforce
+next
+  case (tIfFalse s b c c2 stack x t stack' y c1)
+  from \<open>s b = 0\<close> \<open>c \<turnstile> (IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>z'\<^esup>  (t', stack'')\<close> obtain x' where
+     \<open>c \<turnstile> (c2, s, stack) \<Rightarrow>\<^bsup>x'\<^esup>  (t', stack'')\<close> and \<open>z' = x' + 1\<close>
+    by auto
+  hence \<open> x = x' \<and> t = t' \<and> stack'' = stack'\<close>
+    using tIfFalse.IH by blast
+  then show ?case 
+    by (simp add: \<open>z' = x' + 1\<close> tIfFalse.hyps(3))
+next
+  case (tCall C s z t c r stack)
+  then show ?case 
+    using bigstep_det by blast
+qed (blast | fastforce)+
+
+lemma stail_step_deterministic: 
+  "\<turnstile>(c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack',b) \<Longrightarrow> \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z'\<^esup> (t',stack'',b') \<Longrightarrow> z = z' \<and> t = t' \<and> stack'' = stack' \<and> b = b'" 
+proof (induction c s stack z t stack' b arbitrary: z' t' stack'' b' rule: stail_step_induct)
+  case (tssIfTrue s b c c1 stack x t stack' y c2)
+  then show ?case 
+    by fastforce
+next
+  case (tssIfFalse s b c2 stack x t stack' CONT y c1)
+  from \<open>s b = 0\<close> \<open> \<turnstile>(IF b\<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>z'\<^esup>  (t', stack'', b')\<close> obtain x' where
+     \<open>\<turnstile> (c2, s, stack) \<Rightarrow>\<^bsup>x'\<^esup>  (t', stack'',b')\<close> and \<open>z' = x' + 1\<close>
+    by auto
+  hence \<open> x = x' \<and> t = t' \<and> stack'' = stack' \<and> CONT = b'\<close>
+    using tssIfFalse.IH by blast
+  then show ?case 
+    by (simp add: \<open>z' = x' + 1\<close> tssIfFalse.hyps(3))
+next
+  case (tssCall C s z t c r stack)
+  then show ?case 
+    using bigstep_det by blast
+qed (blast | fastforce)+
+
+(*
+lemma stail_steps_deterministic: 
+  "d \<turnstile>' (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack') \<Longrightarrow> d \<turnstile>' (c,s,stack) \<Rightarrow>\<^bsup>z'\<^esup> (t',stack'') \<Longrightarrow> z = z' \<and> t = t' \<and> stack'' = stack'" 
+proof (induction c s stack z t stack' arbitrary: z' t' stack'' rule: stail_steps_induct)
+  case (tFalse c s stack z t stack')
+  then show ?case 
+    using stail_step_deterministic by blast
+next
+  case (tTrue c s1 stack1 x s2 stack2 y s3 stack3)
+  then show ?case 
+qed
+
+lemma small_sound: "d \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack') \<Longrightarrow> sinvar c \<Longrightarrow> sinvar d \<Longrightarrow> d \<turnstile>' (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack')"
+proof (induction d c s stack z t stack' rule: tsbig_step_t_induct)
+  case (tAssign c x a s stack)
+  then show ?case by blast
+next
   case (tSeq c c1 s1 ss1 x s2 ss2 c2 y s3 ss3 z)
-  hence "c \<turnstile>'(c1, s1) \<Rightarrow>\<^bsup>x\<^esup>  s2" "c \<turnstile>'(c2, s2) \<Rightarrow>\<^bsup>y\<^esup>  s3" by auto
-  from this tSeq show ?case apply (cases) apply auto
-    subgoal
-      by (smt (verit) ab_semigroup_add_class.add_ac(1) tail_step.Seq tail_steps.simps)
-    subgoal
-      by (metis no_tails_no_step)
-    done
+  hence "c \<turnstile>'(c1, s1, ss1) \<Rightarrow>\<^bsup>x\<^esup>  (s2,ss2)" "c \<turnstile>'(c2, s2, ss2) \<Rightarrow>\<^bsup>y\<^esup>  (s3,ss3)" by auto
+  from this tSeq show ?case apply (cases \<open>c = c2\<close>) apply auto sorry
+    case tFalse
+    hence \<open>\<turnstile>(c1;; c2, s1, ss1) \<Rightarrow>\<^bsup>z\<^esup>  (s3, ss3, )\<close>
+    then show ?thesis 
+  next
+    case (tTrue x s2 stack2 y)
+    then show ?thesis sorry
+  qed
 next
-  case (tIfTrue s b c c1 x t y c2)
-  hence "c \<turnstile>'(c1, s) \<Rightarrow>\<^bsup>x\<^esup>  t" by auto
+  case (tIfTrue s b c c1 ss x t st y c2)
+  hence "c \<turnstile>'(c1, s, ss) \<Rightarrow>\<^bsup>x\<^esup>  (t, st)" by auto
   from this tIfTrue show ?case apply (cases) apply auto apply force
-    by (metis Suc_eq_plus1 local.tIfTrue(1) plus_nat.simps(2) tail_step.IfTrue tail_steps.intros(2))
+    by (metis Suc_eq_plus1 local.tIfTrue(1) plus_nat.simps(2) stail_step.IfTrue stail_steps.intros(2))
 next
-  case (tIfFalse s b c c2 x t y c1)
-  hence "c \<turnstile>'(c2, s) \<Rightarrow>\<^bsup>x\<^esup>  t" by auto
+  case (tsPush c v i s stack)
+  then show ?case by blast
+next
+  case (tsPop c v i s stack)
+  then show ?case by blast
+next
+   case (tIfFalse s b c c2 ss x t st y c1)
+  hence " c \<turnstile>'(c2, s, ss) \<Rightarrow>\<^bsup>x\<^esup>  (t, st)" by auto
   from this tIfFalse show ?case apply (cases) apply auto apply force
-    by (metis Suc_eq_plus1 add_Suc tTrue tail_step.IfFalse)
+    by (metis Suc_eq_plus1 add_Suc tTrue stail_step.IfFalse)
 next
-  case (tTail c s z t)
-  hence " c \<turnstile>'(c, s) \<Rightarrow>\<^bsup>z\<^esup>  t" by simp
-  moreover have "\<turnstile>(tTAIL,s) \<Rightarrow>\<^bsup>5 \<^esup> (s,True)"
+  case (tTail c s ss z t ts)
+  hence "c \<turnstile>'(c, s, ss) \<Rightarrow>\<^bsup>z\<^esup>  (t, ts)" by simp
+  moreover have "\<turnstile>(tsTAIL,s,ss) \<Rightarrow>\<^bsup>5 \<^esup> (s,ss,True)"
     by (metis Tail)
   ultimately show ?case by auto
 qed auto
@@ -226,9 +319,9 @@ next
       using ab_semigroup_add_class.add_ac(1) by blast
   qed auto
 qed
+*)
 
-
-unbundle no tcom_syntax and com'_syntax
+unbundle no tscom_syntax and com'_syntax
 
 lemma while'_unrolling:
   assumes "s b \<noteq> 0"
@@ -236,42 +329,57 @@ lemma while'_unrolling:
   using assms by auto
 
 lemma tnoninterference:
-  "\<lbrakk>c'\<turnstile>(c,s) \<Rightarrow>\<^bsup>x \<^esup> t; set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> c'\<turnstile>(c,s(v:=y)) \<Rightarrow>\<^bsup>x \<^esup> t(v:=y)"
-proof (induction c' c s x t rule: tbig_step_t_induct)
-  case (tAssign c x a s)
+  "\<lbrakk>c'\<turnstile>(c,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (t,stack'); set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> c'\<turnstile>(c,s(v:=y),stack) \<Rightarrow>\<^bsup>x \<^esup> (t(v:=y),stack')"
+proof (induction c' c s stack x t stack' rule: tsbig_step_t_induct)
+  case (tAssign c x a s stack)
   hence " s(v := y, x := aval a (s(v := y))) = s(x := aval a s, v := y)" by force
-  thus ?case using tbig_step_t.tAssign[of c x a "s(v:=y)"] by argo
+  thus ?case using tsbig_step_t.tAssign[of c x a "s(v:=y)" stack] by argo
 next
-  case (tCall C s z t c r)
+  case (tsPush c v i s stack)
+  then show ?case 
+    by (smt (verit, ccfv_SIG) fun_upd_def in_mono list.set_intros(1) tsbig_step_t.tsPush vars_tscom.simps(2))
+next
+  case (tsPop c v i s stack)
+  then show ?case
+    by (metis (no_types, lifting) fun_upd_twist list.set_intros(1) subset_code(1) tsbig_step_t.tsPop vars_tscom.simps(3))
+next
+  case (tCall C s z t c r stack)
   hence Call: "(C, s(v := y)) \<Rightarrow>\<^bsup>z \<^esup> t(v := y)" using fresh_var_changed by fastforce
   from tCall have state: " s(v := y, r := (t(v := y)) r) = s(r := t r, v := y)" by auto
-  show ?case using tbig_step_t.tCall[OF Call, of c r] state by argo
-qed (auto | force)+
+  show ?case using tsbig_step_t.tCall[OF Call, of c r] state by metis
+qed auto+
 
 lemma noninterference':
-  "\<lbrakk>\<turnstile>(c,s) \<Rightarrow>\<^bsup>x \<^esup> (t,b); set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> \<turnstile>(c,s(v:=y)) \<Rightarrow>\<^bsup>x \<^esup> (t(v:=y),b)"
-proof (induction c s x t b rule: tail_step_induct)
-  case (Assign x a s)
-  hence "s(v := y, x := aval a (s(v := y))) = s(x := aval a s, v := y)" by force
-  then show ?case using tail_step.Assign[of x a "s(v:=y)"] by argo
+  "\<lbrakk>\<turnstile>(c,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (t,stack',b); set (vars c) \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> \<turnstile>(c,s(v:=y),stack) \<Rightarrow>\<^bsup>x \<^esup> (t(v:=y),stack',b)"
+proof (induction c s stack x t stack' b rule: stail_step_induct)
+  case (tssAssign x a s stack)
+  hence " s(v := y, x := aval a (s(v := y))) = s(x := aval a s, v := y)" by force
+  thus ?case using stail_step.tssAssign[of  x a "s(v:=y)" stack] by argo
 next
-  case (Call C s z t r)
-   hence Call: "(C, s(v := y)) \<Rightarrow>\<^bsup>z \<^esup> t(v := y)" using fresh_var_changed by fastforce
-   from tCall have state: " s(v := y, r := (t(v := y)) r) = s(r := t r, v := y)" by auto
-   show ?case using tbig_step_t.tCall[OF Call, of c r] state
-     by (metis local.Call tail_step.Call)
-qed auto
+  case (tssPush v i s stack)
+  then show ?case 
+    by (smt (verit, ccfv_SIG) fun_upd_def in_mono list.set_intros(1) stail_step.tssPush vars_tscom.simps(2))
+next
+  case (tssPop v i s stack)
+  then show ?case
+    by (metis (no_types, lifting) fun_upd_twist list.set_intros(1) subset_code(1) stail_step.tssPop vars_tscom.simps(3))
+next
+  case (tssCall C s z t  r stack)
+  hence Call: "(C, s(v := y)) \<Rightarrow>\<^bsup>z \<^esup> t(v := y)" using fresh_var_changed by fastforce
+  from tCall have state: " s(v := y, r := (t(v := y)) r) = s(r := t r, v := y)" by auto
+  show ?case using stail_step.tssCall[OF Call, of r] state by metis
+qed auto+
 
 lemma tnoninterference':
-  "\<lbrakk>c'\<turnstile>'(c,s) \<Rightarrow>\<^bsup>x \<^esup> t; set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> c'\<turnstile>'(c,s(v:=y)) \<Rightarrow>\<^bsup>x \<^esup> t(v:=y)"
-proof (induction c s x t rule: tail_steps_induct)
+  "\<lbrakk>c'\<turnstile>'(c,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (t,stack'); set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> c'\<turnstile>'(c,s(v:=y),stack) \<Rightarrow>\<^bsup>x \<^esup> (t(v:=y),stack')"
+proof (induction c s stack x t stack' rule: stail_steps_induct)
   case (tFalse c s z t)
   then show ?case
     using noninterference' by blast
 next
   case (tTrue c s1 x s2 y s3)
   then show ?case
-    by (meson noninterference' tail_steps.tTrue)
+    by (meson noninterference' stail_steps.tTrue)
 qed
 
 section \<open>Translation between tail-call program and while\<close>

@@ -1,5 +1,25 @@
+session General_Recursive_IMP in "GRecToTRec/General_Recursive_IMP" = "IMP" + 
+  sessions
+    "HOL-Library"
+  theories
+    IMP_GRec
+
+session Tail_Recursive_IMP_Stack in "GRecToTRec/Tail_Recursive_IMP_Stack" = "IMP" + 
+  sessions
+    "HOL-Library"
+  theories
+    IMP_Tailcall_Stacked
+
+session GrecToTRec in GRecToTRec = "General_Recursive_IMP" +
+  sessions
+    "Tail_Recursive_IMP_Stack"
+    "HOL-Library"
+  theories
+    GRecToTRec
+
 session IMP = "IMP-" +
-  sessions "HOL-Eisbach"
+  sessions 
+    "HOL-Eisbach"
   theories
     Com
     Big_StepT

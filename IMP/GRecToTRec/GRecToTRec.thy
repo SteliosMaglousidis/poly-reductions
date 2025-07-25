@@ -1,0 +1,183 @@
+theory GRecToTRec
+  imports Com_Tagged
+begin
+
+unbundle rcom_syntax and no com'_syntax and no tscom_syntax
+
+(*1. Enumerate Recursive Calls *)
+
+fun rec_call_count :: "com_tagged \<Rightarrow> nat" where
+   "rec_call_count ((#IF b\<noteq>0 THEN c1 ELSE c2)) = rec_call_count c1 + rec_call_count c2" 
+  |"rec_call_count (c1 #;; c2) =  rec_call_count c1 + rec_call_count c2" 
+  |"rec_call_count (#RECURSE n) = 1" 
+  |"rec_call_count _ = 0"
+
+fun rec_call_list :: "com_tagged \<Rightarrow> nat list" where
+   "rec_call_list ((#IF b\<noteq>0 THEN c1 ELSE c2)) = rec_call_list c1 @ rec_call_list c2" 
+  |"rec_call_list (c1 #;; c2) =  rec_call_list c1 @ rec_call_list c2" 
+  |"rec_call_list (#RECURSE n) = [n]" 
+  |"rec_call_list _ = []"
+
+fun enum_rec_calls_n :: "com_tagged \<Rightarrow> nat \<Rightarrow> com_tagged" where
+   "enum_rec_calls_n (ct1 #;; ct2) n = (enum_rec_calls_n ct1 n) #;; (enum_rec_calls_n ct2 (n + rec_call_count ct1))" 
+  |"enum_rec_calls_n (#IF b\<noteq>0 THEN ct1 ELSE ct2) n = (#IF b\<noteq>0 THEN (enum_rec_calls_n ct1 n) ELSE enum_rec_calls_n ct2 (n + rec_call_count ct1))" 
+  |"enum_rec_calls_n (#RECURSE m) n = #RECURSE n" 
+  |"enum_rec_calls_n (SKIPTagged m) n = (SKIPTagged 0)" 
+  |"enum_rec_calls_n c n = c"
+
+lemma enum_rec_calls_n: "map int (rec_call_list (enum_rec_calls_n c n)) = 
+                        (if rec_call_count c = 0 then [] else [int n..int (n + rec_call_count c - 1)])"
+  apply (induction c n rule: enum_rec_calls_n.induct)
+          apply auto
+   apply (smt (z3) int_zle_neg nless_le upto_split1)
+  by (smt (verit, best) of_nat_0_less_iff upto_split1)
+
+abbreviation "enum_rec_calls c \<equiv> enum_rec_calls_n c 1"
+
+corollary enum_rec_calls: "map int (rec_call_list (enum_rec_calls c)) = 
+                        (if rec_call_count c = 0 then [] else [1..int (rec_call_count c)])"
+  using enum_rec_calls_n by simp
+
+(*2. List switch branches*)
+
+fun has_rec_call :: "com_tagged \<Rightarrow> bool" where
+   "has_rec_call (#RECURSE n) = True" 
+  |"has_rec_call (#IF b\<noteq>0 THEN ct1 ELSE ct2) = (has_rec_call ct1 \<or> has_rec_call ct2)"
+  |"has_rec_call (ct1 #;; ct2) = (has_rec_call ct1 \<or> has_rec_call ct2)" 
+  |"has_rec_call _ = False"
+
+fun switch_branch :: "com_tagged \<Rightarrow> com_tagged * com_tagged list" where
+   "switch_branch (#RECURSE n) = ((#RECURSE n),[])" 
+  |"switch_branch (#IF b\<noteq>0 THEN ct1 ELSE ct2) = 
+    (let (sb1,r1) = switch_branch ct1 in 
+      (let (sb2,r2) = switch_branch ct2 in 
+        (#IF b\<noteq>0 THEN sb1 ELSE sb2,r1@r2)))"
+  |"switch_branch (ct1 #;; ct2) = 
+     (if has_rec_call ct1 then 
+       (let (sb1,r1) = switch_branch ct1 in (sb1, if r1 = [] then [ct2] else map (\<lambda>x. x #;; ct2) r1)) else 
+       (let (sb2,r2) = switch_branch ct2 in
+         (ct1 #;; sb2, r2)))" 
+  |"switch_branch c = (c,[])" 
+
+
+lemma rest_size : "switch_branch c = (sb,rest) \<Longrightarrow> rc \<in> set rest \<Longrightarrow> size rc < size c"
+proof (induction c arbitrary: sb rest  rc rule: switch_branch.induct)
+  case (1 n)
+  then show ?case by auto
+next
+  case (2 b ct1 ct2)
+  obtain sb1 rest1 sb2 rest2 where "switch_branch ct1 = (sb1, rest1)" "switch_branch ct2 = (sb2, rest2)"
+    by fastforce
+  have "rest = rest1@rest2" using \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>switch_branch ct2 = (sb2, rest2)\<close>
+      \<open>switch_branch (#IF b\<noteq>0 THEN ct1 ELSE ct2) = (sb, rest)\<close> by simp
+  hence \<open>rc \<in> set rest1 \<or> rc \<in> set rest2\<close> 
+    using "2.prems"(2) by force
+  then show ?case apply (cases "rc \<in> set rest1")
+    apply auto 
+    using "2.IH"(1) \<open>switch_branch ct1 = (sb1, rest1)\<close> apply force
+    by (simp add: "2.IH"(2) \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>switch_branch ct2 = (sb2, rest2)\<close> less_Suc_eq
+        trans_less_add2)
+next
+  case (3 ct1 ct2)  obtain sb1 rest1 sb2 rest2 where "switch_branch ct1 = (sb1, rest1)" "switch_branch ct2 = (sb2, rest2)"
+    by fastforce
+  then show ?case proof(cases \<open>has_rec_call ct1\<close>)
+    case True
+    then show ?thesis proof(cases \<open>rest1 = []\<close>)
+      case True
+      have \<open>switch_branch (ct1 #;; ct2) = (sb1, [ct2])\<close>  
+        using \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>has_rec_call ct1\<close> \<open>rest1 = []\<close> 
+        by simp
+      hence \<open>sb = sb1\<close> \<open>rest = [ct2]\<close>  
+        using "3.prems"(1) apply fastforce
+        using "3.prems"(1) \<open>switch_branch (ct1 #;; ct2) = (sb1, [ct2])\<close> by fastforce
+        hence \<open>rc = ct2\<close> 
+          using "3.prems"(2) by fastforce
+      then show ?thesis 
+        by auto
+    next
+      case False
+      have \<open>switch_branch (ct1 #;; ct2) = (sb1, map (\<lambda>x. x #;; ct2) rest1)\<close>
+        using \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>has_rec_call ct1\<close> \<open>rest1 \<noteq> []\<close>
+        by simp
+      hence \<open>sb = sb1\<close> \<open>rest = map (\<lambda>x. x #;; ct2) rest1\<close>  
+        using "3.prems"(1) apply fastforce
+        using "3.prems"(1) \<open>switch_branch (ct1 #;; ct2) = (sb1, map (\<lambda>x. x #;; ct2) rest1)\<close>
+        by force
+      hence \<open>rc \<in> set (map (\<lambda>x. x #;; ct2) rest1)\<close>
+        using "3.prems"(2) by fastforce
+      have \<open>\<forall>x. x \<in> set rest1 \<longrightarrow> size x \<le> size ct1\<close>
+        by (simp add: "3.IH"(1) True \<open>switch_branch ct1 = (sb1, rest1)\<close> order_le_less)
+      hence \<open>\<forall>x. x \<in> set (map (\<lambda>x. x #;; ct2) rest1) \<longrightarrow> size x \<le> size (ct1 #;; ct2)\<close>
+        by auto
+      then show ?thesis using \<open>rc \<in> set (map (\<lambda>x. x #;; ct2) rest1)\<close> \<open>\<forall>x. x \<in> set (map (\<lambda>x. x #;; ct2) rest1) \<longrightarrow> size x \<le> size (ct1 #;; ct2)\<close>
+        using "3.IH"(1) True \<open>switch_branch ct1 = (sb1, rest1)\<close> by force
+    qed
+  next
+    case False
+    have \<open>switch_branch (ct1 #;; ct2) = (ct1  #;; sb2, rest2)\<close>
+      using False \<open>switch_branch ct2 = (sb2, rest2)\<close> by auto
+    hence \<open>rest = rest2\<close>
+      using "3.prems"(1) by auto
+    hence \<open>rc \<in> set rest2\<close> using \<open>rc \<in> set rest\<close> by simp
+    then show ?thesis 
+      using "3.IH"(2) False \<open>switch_branch ct2 = (sb2, rest2)\<close> com_tagged.size(12)
+        trans_less_add1 trans_less_add2 by presburger 
+  qed
+qed auto
+
+function switch_branches_bfs :: "com_tagged \<Rightarrow> com_tagged list" where
+ "switch_branches_bfs c = (let (csb,rest) = switch_branch c in 
+      (case rest of [] \<Rightarrow> [csb] 
+                   | sb#sbs \<Rightarrow> csb #  concat (map (switch_branches_bfs) (sb#sbs))))"
+  by auto
+
+termination switch_branches_bfs using rest_size 
+  by (metis "termination" in_measure wf_measure)
+
+
+(*3. Denote call termination points with annotated skips*)
+
+fun add_pop_skips :: "com_tagged \<Rightarrow> com_tagged" where
+ "add_pop_skips (#RECURSE n) = (#RECURSE n)" |
+ "add_pop_skips (ct1 #;; ct2) = (ct1 #;; add_pop_skips ct2)" |
+ "add_pop_skips (#IF b\<noteq>0 THEN ct1 ELSE ct2) = (#IF b\<noteq>0 THEN add_pop_skips ct1 ELSE add_pop_skips ct2)" |
+ "add_pop_skips c = (c #;; SKIPTagged 1)"
+
+unbundle tscom_syntax and no com'_syntax and no rcom_syntax
+
+(*Add stack and tail recursive call commands*)
+
+fun add_stack_coms :: "com_tagged \<Rightarrow> vname list \<Rightarrow> vname \<Rightarrow> com_tagged" where 
+ "add_stack_coms (#RECURSE n) pvars pc = 
+                            push_many_tagged pvars #;;
+                            pc #::= A (N n) #;;
+                            #PUSH pc #;;
+                            pc #::= A (N 1) #;; 
+                            TailTagged" 
+|"add_stack_coms (SKIPTagged (Suc 0)) pvars pc = 
+                            pop_many_tagged pvars #;;
+                            #POP pc #;; 
+                            TailTagged"
+|"add_stack_coms (ct1 #;; ct2) pvars pc = (ct1 #;; add_stack_coms ct2 pvars pc)" 
+|"add_stack_coms (#IF b\<noteq>0 THEN ct1 ELSE ct2) pvars pc = 
+  (#IF b\<noteq>0 THEN add_stack_coms ct1 pvars pc ELSE add_stack_coms ct2 pvars pc)" 
+|"add_stack_coms c pvars pc = c" 
+
+
+abbreviation "call_start (c:: rcom) pc branch_count \<equiv> (IF pc = 0 THEN (
+                                        push_many ((vars c)) ;; 
+                                        ( pc ::= A (N (branch_count + 1))) ;;
+                                        PUSH pc ;;
+                                        (pc ::= A (N 1)) 
+                                  )ELSE tsSKIP)"
+
+
+abbreviation "grec_to_trec (c :: rcom) pc \<equiv> call_start c pc 3 ;;
+                                  (switch_basic pc 
+                                   (map (branch_to_trec (vars c))
+                                    (switch_branches_bfs c)))"
+
+(* optimize later *)
+(* do each step seperatly, prove its specification *)
+
+end

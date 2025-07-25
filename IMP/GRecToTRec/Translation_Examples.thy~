@@ -1,0 +1,102 @@
+theory Translation_Examples
+  imports "GRecToTRec"
+begin
+
+unbundle rcom_syntax and no com'_syntax and no tscom_syntax
+
+abbreviation "fibonacci \<equiv> IF ''n''= 0 ON ''b'' THEN (''r'' ::= A (N 0)) ELSE (
+                     (IF ''n''=1 ON ''b'' THEN (''r'' ::= A (N 1)) ELSE (
+                          (''n'' ::= Sub (V ''n'') (N 1)) ;;
+                            RECURSE ;;
+                            (''r1'' ::= A (V ''r'')) ;;
+                            (''n'' ::= Sub (V ''n'') (N 1)) ;;
+                            RECURSE ;;
+                            (''r2'' ::= A (V ''r'')) ;;
+                            (''r'' ::= Plus (V ''r1'') (V ''r2''))
+                            )))"
+
+abbreviation "fibonacci_tagged \<equiv> tag_rcom fibonacci"
+
+abbreviation "fibonacci_enum \<equiv> enum_rec_calls fibonacci_tagged"
+
+value  "(switch_branches_bfs fibonacci_enum)" 
+
+abbreviation "fibonacci_branch1 \<equiv> 
+           ''b'' #::= (V ''n'' \<ominus> N 0) #;; 
+           #IF ''b''\<noteq>0 THEN ''r'' #::= A (N 0) 
+           ELSE (''b'' #::= (V ''n'' \<ominus> N 1) #;; 
+            #IF ''b''\<noteq>0 THEN ''r'' #::= A (N 1) 
+            ELSE (''n'' #::= (V ''n'' \<ominus> N 1) #;; 
+             #RECURSE 1))"
+
+abbreviation "fibonacci_branch2 \<equiv>  
+          ''r1'' #::= A (V ''r'') #;; 
+          ''n'' #::= (V ''n'' \<ominus> N 1) #;; 
+          #RECURSE 2"
+
+abbreviation "fibonacci_branch3 \<equiv> 
+          ''r2'' #::= A (V ''r'') #;; 
+          ''r'' #::= (V ''r1'' \<oplus> V ''r2'')"
+
+value "add_pop_skips (''b'' #::= (V ''n'' \<ominus> N 0) #;; #IF ''b''
+                                  \<noteq>0 THEN ''r'' #::= A (N 0) ELSE (''b'' #::= (V
+                      ''n'' \<ominus> N 1) #;; #IF ''b''
+                                        \<noteq>0 THEN ''r'' #::= A
+  (N 1) ELSE ''n'' #::= (V ''n'' \<ominus> N 1) #;; #RECURSE 1))"
+
+abbreviation "fibonacci_switch_branches_to_trec \<equiv> map (branch_to_trec (vars fibonacci)) ((switch_branches_bfs fibonacci_enum))"
+
+value "fibonacci_switch_branches_to_trec"
+
+unbundle tscom_syntax and no com'_syntax and no rcom_syntax
+
+abbreviation "fibonacci_grec_to_trec \<equiv> (IF ''pc'' = 0 THEN (
+                                        push_many (remdups (vars fibonacci)) ;; 
+                                        (''pc'' ::= A (N ((length fibonacci_switch_branches) + 1))) ;;
+                                        PUSH ''pc'' ;;
+                                        (''pc'' ::= A (N 1)) 
+                                  )ELSE tsSKIP) ;;
+                                  (switch_basic ''pc'' fibonacci_switch_branches_to_trec)"
+
+value "fibonacci_grec_to_trec"
+
+abbreviation "fibonacci_tail_final \<equiv> 
+                    IF ''pc'' = 0 THEN (
+                                        push_many [''n'',''r'',''r1'',''r2''] ;; 
+                                        (''pc'' ::= A (N 4)) ;;
+                                        PUSH ''pc'' ;;
+                                        (''pc'' ::= A (N 1)) 
+                                 )ELSE tsSKIP ;; 
+                   (IF ''pc'' = 1 THEN (
+                            IF ''n''= 0 THEN (''r'' ::= A (N 0)) ;; 
+                                             pop_many [''n'',''r'',''r1'',''r2''] ;; 
+                                             POP ''pc'' ;;
+                            tsTAIL ELSE 
+                            (IF ''n''= 1 THEN (''r'' ::= A (N 1)) ;; 
+                                             pop_many [''n'',''r'',''r1'',''r2''] ;; 
+                                             POP ''pc'' ;;
+                            tsTAIL 
+                         ELSE 
+                            (''n'' ::= Sub (V ''n'') (N 1)) ;;
+                            push_many [''n'',''r'',''r1'',''r2''] ;;
+                            (''pc'' ::= A (N 2)) ;;
+                            PUSH ''pc'' ;;
+                            (''pc'' ::= A (N 1)) ;;
+                            tsTAIL)) 
+                   ELSE (IF ''pc''=2 THEN (
+                            (''r1'' ::= A (V ''r''));;
+                            (''n'' ::= Sub (V ''n'') (N 1)) ;;
+                            push_many [''n'',''r'',''r1'',''r2''] ;;
+                            (''pc'' ::= A (N 3)) ;;
+                            PUSH ''pc'' ;;
+                            (''pc'' ::= A (N 1)) ;;
+                            tsTAIL) 
+                   ELSE (IF ''pc''=3 THEN (
+                            (''r2'' ::= A (V ''r''));;
+                            (''r'' ::= Plus (V ''r1'') (V ''r2''));; 
+                            pop_many [''n'',''r'',''r1'',''r2''] ;; 
+                            POP ''pc'';;
+                            tsTAIL)
+                   ELSE tsSKIP)))"
+
+end

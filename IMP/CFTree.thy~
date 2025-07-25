@@ -1,0 +1,132 @@
+
+section \<open>Binary Tree\<close>
+
+theory CFTree
+imports IMP_GRec "HOL-Library.Tree" Tail_Recursive_IMP_Stack.IMP_Tailcall_Stacked
+begin
+
+unbundle no com'_syntax and tscom_syntax
+
+unbundle rcom_syntax
+
+datatype
+  rcom_tag = rSKIPTag
+      | rAssignTag vname aexp
+      | rRetTag vname
+      | rFetchTag vname
+      | rSeqTag   
+      | rIfTag vname 
+      | rCallTag com vname
+      | rRecTag  
+
+notation rAssignTag ("_ #::= _" [1000, 61] 61) and
+         rRetTag ("#RETURN" ) and
+         rFetchTag ("#FETCH" ) and
+         rSeqTag ("#;;" ) and
+         rIfTag ("(#IF _/\<noteq>0 THEN ELSE)" [0] 61) and
+         rCallTag ("#CALL _ RETURN _") and
+         rRecTag ("#RECURSE")
+
+fun rcom_to_tag :: "rcom \<Rightarrow> rcom_tag" where
+"rcom_to_tag (rSKIP) = rSKIPTag" |
+"rcom_to_tag (x ::= a) = x #::= a" | 
+"rcom_to_tag (FETCH x) = #FETCH x" | 
+"rcom_to_tag (RETURN x) = #RETURN x" | 
+"rcom_to_tag (c1 ;; c2) = #;;" |
+"rcom_to_tag (IF b\<noteq>0 THEN c1 ELSE c2) = #IF b\<noteq>0 THEN ELSE" |
+"rcom_to_tag (CALL C RETURN r) = #CALL C RETURN r"|
+"rcom_to_tag RECURSE = #RECURSE"
+
+fun rcom_to_tree :: "rcom \<Rightarrow> rcom_tag tree" where 
+"rcom_to_tree (c1 ;; c2) = \<langle>rcom_to_tree c1,#;;,rcom_to_tree c2\<rangle>" |
+"rcom_to_tree (IF b\<noteq>0 THEN c1 ELSE c2) = \<langle>rcom_to_tree c1,#IF b\<noteq>0 THEN ELSE,rcom_to_tree c2\<rangle>" |
+"rcom_to_tree c = \<langle>\<langle>\<rangle>,rcom_to_tag c,\<langle>\<rangle>\<rangle>"
+
+fun tree_to_rcom :: "rcom_tag tree \<Rightarrow> rcom" where 
+"tree_to_rcom \<langle>\<rangle> = rSKIP" |
+"tree_to_rcom \<langle>ct1,#;;, ct2\<rangle> = (tree_to_rcom ct1 ;; tree_to_rcom ct2)" |
+"tree_to_rcom \<langle>ct1,#IF b\<noteq>0 THEN ELSE, ct2\<rangle> = (IF b\<noteq>0 THEN tree_to_rcom ct1 ELSE tree_to_rcom ct2)" |
+"tree_to_rcom \<langle>\<langle>\<rangle>,#CALL C RETURN r,\<langle>\<rangle>\<rangle> = (CALL C RETURN r)"|
+"tree_to_rcom \<langle>\<langle>\<rangle>,x #::= a,\<langle>\<rangle>\<rangle> = (x ::= a)" |
+"tree_to_rcom \<langle>\<langle>\<rangle>,#FETCH x,\<langle>\<rangle>\<rangle> = FETCH x" |
+"tree_to_rcom \<langle>\<langle>\<rangle>,#RETURN x,\<langle>\<rangle>\<rangle> = RETURN x" | 
+"tree_to_rcom \<langle>\<langle>\<rangle>,rSKIPTag,\<langle>\<rangle>\<rangle> = rSKIP" |
+"tree_to_rcom \<langle>\<langle>\<rangle>,#RECURSE,\<langle>\<rangle>\<rangle> = RECURSE" |
+"tree_to_rcom \<langle>_,_,_\<rangle> = rSKIP" 
+
+lemma rcom_tree_sound: "d \<turnstile>\<^sub>R (c,s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,ret')  
+  \<Longrightarrow> d \<turnstile>\<^sub>R (tree_to_rcom (rcom_to_tree c),s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,ret')"
+  by (induction c arbitrary: d s ret z t ret' rule: rcom_to_tree.induct) fastforce+
+
+lemma rcom_tree_complete: "d \<turnstile>\<^sub>R (tree_to_rcom (rcom_to_tree c),s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,ret')  
+  \<Longrightarrow> d \<turnstile>\<^sub>R (c,s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,ret')"
+  by (induction c arbitrary: d s z t ret ret' rule: rcom_to_tree.induct) fastforce+
+
+lemma rcom_tree_comp: "d \<turnstile>\<^sub>R (tree_to_rcom (rcom_to_tree c),s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,ret')   
+  \<longleftrightarrow> d \<turnstile>\<^sub>R (c,s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,ret')" using rcom_tree_sound rcom_tree_complete by metis
+
+
+unbundle no com'_syntax and rcom_syntax
+
+unbundle tscom_syntax
+
+datatype
+  tscom_tag = tsSKIPTag
+      | tsAssignTag vname aexp
+      | tsPushTag vname nat
+      | tsPopTag vname nat
+      | tsSeqTag   
+      | tsIfTag vname 
+      | tsCallTag com vname
+      | tsTailTag  
+
+notation tsAssignTag ("_ #::= _" [1000, 61] 61) and
+         tsPushTag ("_ #::\<Rightarrow> _") and
+         tsPopTag ("_ #\<Leftarrow>:: _") and
+         tsSeqTag ("#;;" ) and
+         tsIfTag ("(#IF _/\<noteq>0 THEN ELSE)" [0] 61) and
+         tsCallTag ("#TCALL _ RETURN _") and
+         tsTailTag ("#TAIL")
+
+fun tscom_to_tag :: "tscom \<Rightarrow> tscom_tag" where
+"tscom_to_tag (tsSKIP) = tsSKIPTag" |
+"tscom_to_tag (x ::= a) = x #::= a" | 
+"tscom_to_tag (x ::\<Rightarrow> i) = x #::\<Rightarrow> i" | 
+"tscom_to_tag (i \<Leftarrow>:: x) = i #\<Leftarrow>:: x" | 
+"tscom_to_tag (c1 ;; c2) = #;;" |
+"tscom_to_tag (IF b\<noteq>0 THEN c1 ELSE c2) = #IF b\<noteq>0 THEN ELSE" |
+"tscom_to_tag (TCALL C RETURN r) = #TCALL C RETURN r"|
+"tscom_to_tag tsTAIL = #TAIL"
+
+fun tscom_to_tree :: "tscom \<Rightarrow> tscom_tag tree" where 
+"tscom_to_tree (c1 ;; c2) = \<langle>tscom_to_tree c1,#;;,tscom_to_tree c2\<rangle>" |
+"tscom_to_tree (IF b\<noteq>0 THEN c1 ELSE c2) = \<langle>tscom_to_tree c1,#IF b\<noteq>0 THEN ELSE,tscom_to_tree c2\<rangle>" |
+"tscom_to_tree c = \<langle>\<langle>\<rangle>,tscom_to_tag c,\<langle>\<rangle>\<rangle>"
+
+fun tree_to_tscom :: "tscom_tag tree \<Rightarrow> tscom" where 
+"tree_to_tscom \<langle>\<rangle> = tsSKIP" |
+"tree_to_tscom \<langle>ct1,#;;, ct2\<rangle> = (tree_to_tscom ct1 ;; tree_to_tscom ct2)" |
+"tree_to_tscom \<langle>ct1,#IF b\<noteq>0 THEN ELSE, ct2\<rangle> = (IF b\<noteq>0 THEN tree_to_tscom ct1 ELSE tree_to_tscom ct2)" |
+"tree_to_tscom \<langle>\<langle>\<rangle>,#TCALL C RETURN r,\<langle>\<rangle>\<rangle> = (TCALL C RETURN r)"|
+"tree_to_tscom \<langle>\<langle>\<rangle>,x #::= a,\<langle>\<rangle>\<rangle> = (x ::= a)" |
+"tree_to_tscom \<langle>\<langle>\<rangle>, x #::\<Rightarrow> i,\<langle>\<rangle>\<rangle> =  x ::\<Rightarrow> i" |
+"tree_to_tscom \<langle>\<langle>\<rangle>,i #\<Leftarrow>:: x,\<langle>\<rangle>\<rangle> = i \<Leftarrow>:: x" | 
+"tree_to_tscom \<langle>\<langle>\<rangle>,tsSKIPTag,\<langle>\<rangle>\<rangle> = tsSKIP" |
+"tree_to_tscom \<langle>\<langle>\<rangle>,#TAIL,\<langle>\<rangle>\<rangle> = tsTAIL" |
+"tree_to_tscom \<langle>_,_,_\<rangle> = tsSKIP" 
+
+lemma tscom_tree_sound: "d \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack')  
+  \<Longrightarrow> d \<turnstile> (tree_to_tscom (tscom_to_tree c),s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack')"
+  apply (induction c arbitrary: d s stack z t stack' rule: tscom_to_tree.induct) 
+         apply fastforce+
+  by simp+
+
+lemma tscom_tree_complete: "d \<turnstile> (tree_to_tscom (tscom_to_tree c),s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack')  
+  \<Longrightarrow> d \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack')"
+  by (induction c arbitrary: d s z t stack stack' rule: tscom_to_tree.induct) fastforce+
+
+lemma tscom_tree_comp: "d \<turnstile> (tree_to_tscom (tscom_to_tree c),s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack') 
+  \<longleftrightarrow> d \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack')" using tscom_tree_sound tscom_tree_complete by metis
+
+
+end
