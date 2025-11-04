@@ -1,0 +1,194 @@
+theory GRecToTRecProof
+  imports GRecToTRec
+begin
+
+
+corollary upto_no_rec: "\<not>has_rec c \<Longrightarrow> c' \<turnstile>UPTO (c,s,ret) \<Rightarrow>\<^bsup>x \<^esup> s' = c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> s'"
+  using upto_no_rec_sound upto_no_rec_complete by metis
+
+
+lemma upto_trec_complete: "c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> s' \<Longrightarrow> is_trec c \<Longrightarrow> c' \<turnstile>UPTO (c,s,ret) \<Rightarrow>\<^bsup>x \<^esup> s'"
+  apply (induction c' c s ret x s' rule: rtaggedbig_step_t_induct) apply auto
+  using upto_no_rec by blast
+
+lemma upto_progress: "c' \<turnstile>UPTO (c,s,ret) \<Rightarrow>\<^bsup>x \<^esup> s' \<Longrightarrow> x \<ge> 1"
+  by (induction c' c s ret x s' rule: upto_with_rec_induct) (auto simp add: Suc_le_eq bigstep_progress)
+
+(* What is executed after the first recursive call terminates*)
+inductive
+  rest_sem :: "rcom_tagged \<Rightarrow> rcom_tagged \<times> state \<times> vname \<Rightarrow> rcom_tagged \<Rightarrow> bool" ("_ \<turnstile>REST _ \<Rightarrow>  _" 55)
+where
+restSeqRec: "\<lbrakk>has_rec c1; c \<turnstile>REST (c1,s1,ret) \<Rightarrow> r2\<rbrakk> \<Longrightarrow> c \<turnstile>REST (c1#\<^sub>r;;c2, s1,ret) \<Rightarrow> r2#\<^sub>r;;c2" |
+restSeqTRec: "\<lbrakk>has_rec c1; c \<turnstile>REST (c1,s1,ret) \<Rightarrow> r2\<rbrakk> \<Longrightarrow> c \<turnstile>REST (c1#\<^sub>r;;c2, s1,ret) \<Rightarrow> r2#\<^sub>r;;c2" |
+restSeqNoRec: "\<lbrakk>\<not>has_rec c1; c \<turnstile>UPTO (c1,s1,ret) \<Rightarrow>\<^bsup>x\<^esup> s2; c \<turnstile>REST (c2,s2,ret) \<Rightarrow> r3\<rbrakk> \<Longrightarrow> c \<turnstile>REST (c1#\<^sub>r;;c2, s1,ret) \<Rightarrow> r3" |
+restIfTrue: "\<lbrakk>s b \<noteq> 0; c \<turnstile>REST (c1,s,ret) \<Rightarrow> r\<rbrakk> \<Longrightarrow> c \<turnstile>REST (#\<^sub>rIF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow> r" |
+restIfFalse: "\<lbrakk>s b = 0; c \<turnstile>REST (c2,s,ret) \<Rightarrow> r\<rbrakk> \<Longrightarrow> c \<turnstile>REST (#\<^sub>rIF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow> r" 
+bundle rest_sem
+begin
+notation rest_sem ("_ \<turnstile>REST _ \<Rightarrow> _" 55)
+end
+
+code_pred rest_sem .
+
+declare rest_sem.intros[intro]
+
+lemmas rest_sem_induct = rest_sem.induct[split_format(complete)]
+
+inductive_cases restSkip_tE[elim!]: "c \<turnstile>REST (rSKIPTagged n,s) \<Rightarrow> t"
+inductive_cases restAssign_tE[elim!]: "c \<turnstile>REST (x #\<^sub>r::= a,s) \<Rightarrow> t"
+inductive_cases restSeq_tE[elim!]: "c \<turnstile>REST (c1#\<^sub>r;;c2,s1) \<Rightarrow> s3"
+inductive_cases restIf_tE[elim!]: "c \<turnstile>REST (#\<^sub>rIF b \<noteq>0 THEN c1 ELSE c2,s) \<Rightarrow> t"
+inductive_cases restCall_tE[elim!]: "c \<turnstile>REST (#\<^sub>rCALL C RETURN r,s) \<Rightarrow> t"
+inductive_cases restRec_tE[elim]: "c \<turnstile>REST (#\<^sub>rRECURSE n,s) \<Rightarrow> t"
+
+lemma upto_and_rest:" c' \<turnstile>REST (c,s,ret) \<Rightarrow> r \<Longrightarrow>  c' \<turnstile>UPTO (c,s,ret) \<Rightarrow>\<^bsup>x \<^esup> s' \<Longrightarrow> c' \<turnstile>\<^sub>R# (r,s',ret) \<Rightarrow>\<^bsup> y \<^esup> s'' \<Longrightarrow> z = x + y
+              \<Longrightarrow> c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> z \<^esup> s''"
+proof (induction c' c s ret r arbitrary: x s' y s'' z rule: rest_sem_induct)
+  case (restSeq2 c1 c s1 ret xa s2 c2 r3)
+  from \<open>c \<turnstile>UPTO (c1 #\<^sub>r;; c2, s1, ret) \<Rightarrow>\<^bsup>x\<^esup>  s'\<close> \<open>\<not> has_rec c1\<close> have \<open> c \<turnstile>UPTO (c2, s2, ret) \<Rightarrow>\<^bsup>x - xa\<^esup> s'\<close>
+    using restSeq2.hyps(2) by force
+  hence \<open>c \<turnstile>\<^sub>R# (c2, s2, ret) \<Rightarrow>\<^bsup>x - xa + y\<^esup> s''\<close> 
+    using restSeq2.IH restSeq2.prems(2) by blast
+  have \<open>c \<turnstile>\<^sub>R# (c1, s1, ret) \<Rightarrow>\<^bsup>xa\<^esup>  s2\<close> using \<open>\<not> has_rec c1\<close> upto_no_rec_sound
+    using restSeq2.hyps(2) by blast
+  then show ?case using \<open>c \<turnstile>\<^sub>R# (c2, s2, ret) \<Rightarrow>\<^bsup>x - xa + y\<^esup> s''\<close> \<open>z = x + y\<close> upto_progress 
+    using \<open>c \<turnstile>UPTO (c2, s2, ret) \<Rightarrow>\<^bsup>x - xa\<^esup> s'\<close> by fastforce
+qed fastforce+
+
+lemma upto_state_time: 
+   "c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> z \<^esup> s' \<Longrightarrow> \<exists>s' t. c' \<turnstile>UPTO (c,s,ret) \<Rightarrow>\<^bsup>t \<^esup> s'" 
+ proof (induction c' c s ret z s' rule: rtaggedbig_step_t_induct)
+  case (rSeq c c1 s1 ret x s2 c2 y s3 z)
+  then show ?case 
+    by (meson uptoSeq1 uptoSeq2 upto_no_rec)
+qed auto
+
+lemma upto_state_time':
+  assumes "c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> z \<^esup> s''"
+  obtains s' t where "c' \<turnstile>UPTO (c,s,ret) \<Rightarrow>\<^bsup>t \<^esup> s'"
+  using assms upto_state_time by blast
+
+lemma rest_has_rec: "c' \<turnstile>REST (c,s,ret) \<Rightarrow> r \<Longrightarrow> has_rec c"
+  by (induction c' c s ret r rule: rest_sem_induct) auto
+
+lemma no_has_rec_rest: "\<not>has_rec c \<Longrightarrow> \<nexists>r. c' \<turnstile>REST (c,s,ret) \<Rightarrow> r"
+  using rest_has_rec by blast
+
+lemma rest_no_trec: "c' \<turnstile>REST (c,s,ret) \<Rightarrow> r \<Longrightarrow> \<not> is_trec c"
+  by (induction c' c s ret r rule: rest_sem_induct) auto
+
+lemma is_trec_no_rest: "is_trec c \<Longrightarrow> \<nexists>r. c' \<turnstile>REST (c,s,ret) \<Rightarrow> r"
+  using rest_no_trec by auto
+
+lemma has_rec_Seq_rest: "has_rec c1 \<Longrightarrow> \<exists>r . c' \<turnstile>REST (c1 #\<^sub>r;; c2, s, ret) \<Rightarrow>  r"
+  try
+
+lemma no_rest_invar: "\<nexists>r. c' \<turnstile>REST (c,s,ret) \<Rightarrow> r \<Longrightarrow> is_trec c"
+proof (induction c arbitrary: c' s ret)
+  case (rSeqTagged c1 c2)
+  then show ?case apply (auto)
+    subgoal sorry
+next
+  case (rIfTagged x1a c1 c2)
+  then show ?case sorry
+qed auto 
+  
+
+lemma upto_no_rest:
+   "c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> t \<^esup> s' \<Longrightarrow> \<not> (\<exists> r. c' \<turnstile>REST (c,s,ret) \<Rightarrow> r) \<Longrightarrow> c' \<turnstile>UPTO (c,s,ret) \<Rightarrow>\<^bsup>t \<^esup> s'" 
+proof (induction c' c s ret t s' rule: rtaggedbig_step_t_induct)
+  case (rSkip c n s ret)
+  then show ?case sorry
+next
+  case (rAssign c x a s ret)
+  then show ?case sorry
+next
+  case (rSeq c c1 s1 ret x s2 c2 y s3 z)
+  then show ?case sorry
+next
+  case (rIfTrue s b c c1 ret x t y c2)
+  then show ?case sorry
+next
+  case (rIfFalse s b c c2 ret x t y c1)
+  then show ?case sorry
+next
+  case (rCall C s z t c r ret)
+  then show ?case sorry
+next
+  case (rRec c s ret z t n)
+  then show ?case sorry
+qed
+
+
+(* Semantics where after each recursive call terminates, it executes another program. *)
+inductive
+  rstaggedbig_step_t :: "rcom_tagged \<Rightarrow> rcom_tagged list \<Rightarrow> rcom_tagged \<times> state \<times> vname \<Rightarrow> nat \<Rightarrow> state \<Rightarrow> bool" ("_ S _ \<turnstile>\<^sub>R\<^sub>S# _ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
+where
+rsSkip: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (rSKIPTagged n,s,ret) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> s" |
+rsAssign: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (x #\<^sub>r::= a,s,ret) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> s(x := aval a s)" |
+rsSeq: "\<lbrakk>c S sbs \<turnstile>\<^sub>R\<^sub>S# (c1,s1,ret) \<Rightarrow>\<^bsup>x \<^esup> s2 ; c S sbs \<turnstile>\<^sub>R\<^sub>S# (c2,s2,ret) \<Rightarrow>\<^bsup>y \<^esup> s3 ; z=x+y \<rbrakk> \<Longrightarrow> c S sbs \<turnstile>\<^sub>R\<^sub>S# (c1#\<^sub>r;;c2, s1,ret) \<Rightarrow>\<^bsup>z \<^esup> s3" |
+rsIfTrue: "\<lbrakk> s b \<noteq> 0;  c S sbs \<turnstile>\<^sub>R\<^sub>S# (c1,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t; y=x+1 \<rbrakk> \<Longrightarrow> c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rIF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow>\<^bsup>y \<^esup> t" |
+rsIfFalse: "\<lbrakk> s b = 0; c S sbs \<turnstile>\<^sub>R\<^sub>S# (c2,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t; y=x+1  \<rbrakk> \<Longrightarrow> c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rIF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow>\<^bsup>y \<^esup> t" |
+rsCall: "(C,s) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rCALL C RETURN r,s,ret) \<Rightarrow>\<^bsup>z \<^esup> s(r:=t r)" |
+rsRec: "sbs = [] \<Longrightarrow> c \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> t \<Longrightarrow> c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rRECURSE n,s,ret) \<Rightarrow>\<^bsup>5 + z \<^esup> s(ret:=t ret)"|
+\<comment> \<open>New rule\<close>
+rsRecSwitch: "\<lbrakk>length sbs > n ; c \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> t; c \<turnstile>\<^sub>R# (sbs ! n, s(ret:=t ret), ret) \<Rightarrow>\<^bsup> y \<^esup> r; z=x+y\<rbrakk> \<Longrightarrow>  c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rRECURSE n,s,ret) \<Rightarrow>\<^bsup>5 + z \<^esup> r"
+bundle rstaggedbig_step_t
+begin
+notation rstaggedbig_step_t ("_ \<turnstile>\<^sub>R\<^sub>S# _ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
+end
+
+code_pred rstaggedbig_step_t .
+
+declare rstaggedbig_step_t.intros[intro]
+
+lemmas rstaggedbig_step_t_induct = rstaggedbig_step_t.induct[split_format(complete)]
+
+inductive_cases rstaggedSkip_tE[elim!]: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (rSKIPTagged n,s) \<Rightarrow>\<^bsup>x \<^esup> t"
+inductive_cases rstaggedAssign_tE[elim!]: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (x #\<^sub>r::= a,s) \<Rightarrow>\<^bsup>p \<^esup> t"
+inductive_cases rstaggedSeq_tE[elim!]: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (c1#\<^sub>r;;c2,s1) \<Rightarrow>\<^bsup>p \<^esup> s3"
+inductive_cases rstaggedIf_tE[elim!]: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rIF b \<noteq>0 THEN c1 ELSE c2,s) \<Rightarrow>\<^bsup>x \<^esup> t"
+inductive_cases rstaggedCall_tE[elim!]: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rCALL C RETURN r,s) \<Rightarrow>\<^bsup>z \<^esup> t"
+inductive_cases rstaggedRec_tE[elim]: "c S sbs \<turnstile>\<^sub>R\<^sub>S# (#\<^sub>rRECURSE n,s) \<Rightarrow>\<^bsup>z \<^esup> t"
+
+lemma rs_bigstep_empty_sound: "c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> t \<Longrightarrow> c' S [] \<turnstile>\<^sub>R\<^sub>S# (c,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t"
+  by (induction c' c s ret x t rule: rtaggedbig_step_t_induct) blast+
+
+lemma rs_bigstep_empty_complete: "c' S sbs \<turnstile>\<^sub>R\<^sub>S# (c,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t \<Longrightarrow> sbs = [] \<Longrightarrow>  c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> t"
+  apply (induction c' sbs c s ret  x t rule: rstaggedbig_step_t_induct) apply blast+
+  by auto
+
+
+lemma switch_branch_sem: "c \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> t \<Longrightarrow> switch_branch (enum_rec_calls_n c (length sbs)) = (sb, rest) 
+                      \<Longrightarrow> c S sbs@rest \<turnstile>\<^sub>R\<^sub>S# (sb,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t"
+proof(induction c' c s ret x t arbitrary: sb sbs rest rule: rtaggedbig_step_t_induct)
+  case (rSkip c n s ret)
+  then show ?case 
+    using enum_rec_calls_def by auto
+next
+  case (rAssign c x a s ret)
+  then show ?case 
+    using enum_rec_calls_def
+    by (metis enum_rec_calls_n.simps(5) prod.inject rstaggedbig_step_t.rAssign
+        switch_branch.simps(5))
+next
+  case (rSeq c c1 s1 ret x s2 c2 y s3 z)
+  then show ?case sorry
+next
+  case (rIfTrue s b c c1 ret x t y c2)
+  then show ?case sorry
+next
+  case (rIfFalse s b c c2 ret x t y c1)
+  then show ?case sorry
+next
+  case (rCall C s z t c r ret)
+  then show ?case sorry
+next
+  case (rRec c s ret x t sbs n y r z)
+  then show ?case sorry
+qed
+
+lemma switch_branches_sem: "c' \<turnstile>\<^sub>R# (c,s,ret) \<Rightarrow>\<^bsup> x \<^esup> t \<Longrightarrow> switch_branch (enum_rec_calls_n c (length sbs)) = (sb, rest) 
+                      \<Longrightarrow> c' S rest \<turnstile>\<^sub>R\<^sub>S# (sb,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t"
+
+end

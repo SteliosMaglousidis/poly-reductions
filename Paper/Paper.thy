@@ -22,7 +22,7 @@ text \<open>
 section \<open>Preliminaries\<close>
 
 text \<open>Registers are of @{typ vname}, values of @{typ val}, state of @{typ state}.\<close>
-
+camp
 text \<open>Atom evaluation function @{const atomVal} with the following equations:\<close>
 (*<*)context includes aops_syntax and atom_syntax begin(*>*)
 

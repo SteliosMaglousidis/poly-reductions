@@ -18,7 +18,6 @@ notation rAssign ("_ ::= _" [1000, 61] 61) and
          rSeq ("_;;/ _"  [60, 61] 60) and
          rIf ("(IF _/\<noteq>0 THEN _/ ELSE _)"  [0, 0, 61] 61) and
          rCall ("CALL _ RETURN _") and
-(* Add return register or add it to the semantics*)
          rRec ("RECURSE") 
 end
 
@@ -67,20 +66,18 @@ next
 qed
 end
 
-type_synonym rstate = "val list"
-
 inductive
   rbig_step_t :: "rcom \<Rightarrow> rcom \<times> state \<times> vname \<Rightarrow> nat \<Rightarrow> state \<Rightarrow> bool" ("_ \<turnstile>\<^sub>R _ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
 where
 rSkip: "c \<turnstile>\<^sub>R (rSKIP,s,ret) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> s" |
 rAssign: "c \<turnstile>\<^sub>R (x ::= a,s,ret) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> s(x := aval a s)" |
 rSeq: "\<lbrakk>c \<turnstile>\<^sub>R (c1,s1,ret) \<Rightarrow>\<^bsup>x \<^esup> s2 ; c \<turnstile>\<^sub>R (c2,s2,ret) \<Rightarrow>\<^bsup>y \<^esup> s3 ; z=x+y \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>R (c1;;c2, s1,ret) \<Rightarrow>\<^bsup>z \<^esup> s3" |
-rIfTrue: "\<lbrakk> s b \<noteq> 0;  c \<turnstile>\<^sub>R (c1,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t; y=x+1 \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>R (IF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow>\<^bsup>y \<^esup> t" |
-rIfFalse: "\<lbrakk> s b = 0; c \<turnstile>\<^sub>R (c2,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t; y=x+1  \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>R (IF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow>\<^bsup>y \<^esup> t" |
+rIfTrue: "\<lbrakk> s b \<noteq> 0; c \<turnstile>\<^sub>R (c1,s,ret) \<Rightarrow>\<^bsup>x \<^esup> s'; y=x+1 \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>R (IF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow>\<^bsup>y \<^esup> s'" |
+rIfFalse: "\<lbrakk> s b = 0; c \<turnstile>\<^sub>R (c2,s,ret) \<Rightarrow>\<^bsup>x \<^esup> s'; y=x+1  \<rbrakk> \<Longrightarrow> c \<turnstile>\<^sub>R (IF b \<noteq>0 THEN c1 ELSE c2, s, ret) \<Rightarrow>\<^bsup>y \<^esup> s'" |
 rCall: "(C,s) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> c \<turnstile>\<^sub>R (CALL C RETURN r,s,ret) \<Rightarrow>\<^bsup>z \<^esup> s(r:=t r)" |
 \<comment> \<open>New rule\<close>
-rRec: "c \<turnstile>\<^sub>R (c,s,ret) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> c \<turnstile>\<^sub>R (RECURSE,s,ret) \<Rightarrow>\<^bsup>5 + z \<^esup> (s(ret:=t ret))"
-bundle rbig_step_syntax
+rRec: "c \<turnstile>\<^sub>R (c,s,ret) \<Rightarrow>\<^bsup> z \<^esup> t \<Longrightarrow> c \<turnstile>\<^sub>R (RECURSE,s,ret) \<Rightarrow>\<^bsup>5 + z \<^esup> s(ret:=t ret)"
+bundle rbig_step_t
 begin
 notation rbig_step_t ("_ \<turnstile>\<^sub>R _ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
 end
@@ -109,21 +106,21 @@ fun vars_rcom :: "rcom \<Rightarrow> vname list" where
 "vars_rcom _ = []"
 
 instance ..
-
 end
 
-fun recs :: "rcom \<Rightarrow> bool" where
-  "recs RECURSE \<longleftrightarrow> True" |
-  "recs (c1;;c2) \<longleftrightarrow> recs c1 \<or> recs c2" |
-  "recs (IF b\<noteq>0 THEN c1 ELSE c2) \<longleftrightarrow> recs c1 \<or> recs c2" |
-  "recs _ \<longleftrightarrow> False"
+fun has_rec :: "rcom \<Rightarrow> bool" where
+  "has_rec RECURSE \<longleftrightarrow> True" |
+  "has_rec (c1;;c2) \<longleftrightarrow> has_rec c1 \<or> has_rec c2" |
+  "has_rec (IF b\<noteq>0 THEN c1 ELSE c2) \<longleftrightarrow> has_rec c1 \<or> has_rec c2" |
+  "has_rec _ \<longleftrightarrow> False"
 
+text \<open>The invariant characterizing tail-recursive programs including non-recursive ones\<close>
 fun invar :: "rcom \<Rightarrow> bool" where
-  "invar (c\<^sub>1;;c\<^sub>2) \<longleftrightarrow> \<not>recs c\<^sub>1 \<and> invar c\<^sub>2" |
+  "invar (c\<^sub>1;;c\<^sub>2) \<longleftrightarrow> \<not>has_rec c\<^sub>1 \<and> invar c\<^sub>2" |
   "invar (IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) \<longleftrightarrow> invar c\<^sub>1 \<and> invar c\<^sub>2" |
   "invar _ \<longleftrightarrow> True"
 
-lemma no_recs_invar[simp]: "\<not>recs c \<Longrightarrow> invar c"
+lemma no_has_rec_invar[simp]: "\<not>has_rec c \<Longrightarrow> invar c"
   by (induction c) auto
 
 fun call_count :: "rcom \<Rightarrow> nat" where
@@ -132,47 +129,11 @@ fun call_count :: "rcom \<Rightarrow> nat" where
 "call_count (CALL C RETURN r') = 1" |
 "call_count _ = 0"
 
-fun rec_call_count :: "rcom \<Rightarrow> nat" where
-"rec_call_count ((IF b\<noteq>0 THEN c1 ELSE c2)) = rec_call_count c1 + rec_call_count c2" |
-"rec_call_count (c1 ;; c2) =  rec_call_count c1 + rec_call_count c2" |
-"rec_call_count (RECURSE) = 1" |
-"rec_call_count _ = 0"
-
-
 abbreviation if_equals_var ("(IF _/=_ ON _ THEN _/ ELSE _ )"  [0, 0, 0, 0, 61] 61) where
 "if_equals_var x v b c1 c2  \<equiv> ((b ::= Sub (V x) (V v)) ;; IF b\<noteq>0 THEN c1 ELSE c2)"
 
 abbreviation if_equals ("(IF _/=_ ON _ THEN _/ ELSE _ )"  [0, 0, 0, 0, 61] 61) where
 "if_equals x v b c1 c2  \<equiv> ((b ::= Sub (V x) (N v)) ;; (IF b\<noteq>0 THEN c1 ELSE c2))"
-
-term "fibonacci_tail_final \<equiv> 
-                    IF pc = 0 ON b THEN (push_all_vars;; 
-                             push_pc_max_plus1) ELSE rSKIP ;; 
-                   (IF pc = 1 ON b THEN (
-                            IF n=0 ON b THEN (r ::= A (N 0)) ;; pop_all_vars ;; pop_pc ;;
-                            RECURSE ELSE 
-                            (IF n=1 ON b THEN (r ::= A (N 1)) ;; pop_all_vars ;; pop_pc ;;
-                            RECURSE 
-                         ELSE 
-                            (n ::= Sub (V n) (N 1)) ;;
-                            push_all_vars ;;
-                            push_pc_2 ;;
-                            pc1;;
-                            RECURSE)) 
-                   ELSE (IF pc=2 ON b THEN (
-                            (r1 ::= A (V r));;
-                            (n ::= Sub (V n) (N 1)) ;;
-                            push_all_vars ;;
-                            push_pc_3 ;;
-                            pc1;;
-                            RECURSE) 
-                   ELSE (IF pc=3 ON b THEN (
-                            (r2 ::= A (V r));;
-                            (r ::= Plus (V r1) (V r2));; 
-                            pop_all_vars;; 
-                            pop_pc;;
-                            RECURSE)
-                   ELSE rSKIP)))"
 
 (* Looks as if there is no need to eliminate tail calls *)
 term "ackermann \<equiv> (IF m=0 ON b THEN (ret ::= Plus (V n) (N 1)) ELSE 
@@ -221,51 +182,6 @@ term "ackermann_trec \<equiv> (IF pc=0 ON b THEN (
                             pop_all_vars ;; 
                             pop_pc))))"
 
- 
-section \<open>Semantics for small-step-ish reasoning (loops)\<close>
-text \<open>Big-step semantics that just returns true for Tail\<close>
-inductive
-  rec_step :: "(rcom \<times> state \<times> vname) \<Rightarrow> nat \<Rightarrow> (state \<times> bool) \<Rightarrow> bool" ("\<turnstile>\<^sub>R_ \<Rightarrow>\<^bsup>_\<^esup>  _" 55)
-where
-Skip: "\<turnstile>\<^sub>R (rSKIP,s,ret) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> (s,False)" |
-Assign: "\<turnstile>\<^sub>R(x ::= a,s,ret) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(x := aval a s),False)" |
-Seq: "\<lbrakk>\<turnstile>\<^sub>R (c1,s1,ret) \<Rightarrow>\<^bsup>x \<^esup> (s2,CONT1); \<turnstile>\<^sub>R (c2,s2,ret2) \<Rightarrow>\<^bsup>y \<^esup> (s3,CONT2) ; z=x+y \<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>R (c1;;c2,s1,ret1) \<Rightarrow>\<^bsup>z\<^esup> (s3,CONT1 \<or> CONT2)" |
-IfTrue: "\<lbrakk> s b \<noteq> 0; \<turnstile>\<^sub>R (c1,s,ret) \<Rightarrow>\<^bsup>x \<^esup> (t,CONT); y=x+1 \<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>R (IF b \<noteq>0 THEN c1 ELSE c2, s, ret1) \<Rightarrow>\<^bsup>y \<^esup> (t,CONT)" |
-IfFalse: "\<lbrakk> s b = 0; \<turnstile>\<^sub>R (c2,s,ret) \<Rightarrow>\<^bsup>x \<^esup> (t,CONT); y=x+1  \<rbrakk> \<Longrightarrow> \<turnstile>\<^sub>R (IF b \<noteq>0 THEN c1 ELSE c2, s,ret1) \<Rightarrow>\<^bsup>y \<^esup> (t,CONT)" |
-Call: "(C,s) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> \<turnstile>\<^sub>R (CALL C RETURN r,s,ret) \<Rightarrow>\<^bsup>z \<^esup> (s(r:=t r),False)" |
-Rec: "\<turnstile>\<^sub>R (RECURSE,s,ret1) \<Rightarrow>\<^bsup>5 \<^esup> (s,True)"
-
-code_pred rec_step .
-
-declare rec_step.intros[intro]
-
-lemmas rec_step_induct = rec_step.induct[split_format(complete)]
-
-inductive_cases recSkip_tE[elim!]: "\<turnstile>\<^sub>R (rSKIP,s) \<Rightarrow>\<^bsup>x \<^esup> (t,b)"
-inductive_cases recAssign_tE[elim!]: "\<turnstile>\<^sub>R (x ::= a,s) \<Rightarrow>\<^bsup>p \<^esup> (t,b)"
-inductive_cases recSeq_tE[elim!]: "\<turnstile>\<^sub>R (c1;;c2,s1) \<Rightarrow>\<^bsup>p \<^esup> (t,b)"
-inductive_cases recIf_tE[elim!]: "\<turnstile>\<^sub>R (IF b \<noteq>0 THEN c1 ELSE c2,s) \<Rightarrow>\<^bsup>x \<^esup> (t,CONT)"
-inductive_cases recCall_tE[elim!]: "\<turnstile>\<^sub>R (CALL C RETURN v,s) \<Rightarrow>\<^bsup>z \<^esup> (t,ret)"
-inductive_cases recRec_tE[elim]: "\<turnstile>\<^sub>R (RECURSE,s) \<Rightarrow>\<^bsup>x \<^esup> (t,ret)"
-
-text \<open>Closure of tails\<close>
-inductive
- rec_steps :: "rcom \<Rightarrow> rcom \<times> state \<times> vname  \<Rightarrow> nat \<Rightarrow> state \<Rightarrow> bool" ("_ \<turnstile>\<^sub>R''_ \<Rightarrow>\<^bsup>_\<^esup>  _" 55) for d
-where
-rFalse: "\<turnstile>\<^sub>R(c,s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,False) \<Longrightarrow> d \<turnstile>\<^sub>R' (c,s,ret)\<Rightarrow>\<^bsup> z \<^esup> t" |
-rTrue: "\<turnstile>\<^sub>R(c,s1,ret) \<Rightarrow>\<^bsup>x \<^esup> (s2,True) \<Longrightarrow> d \<turnstile>\<^sub>R' (d,s2,ret)\<Rightarrow>\<^bsup> y \<^esup> s3 \<Longrightarrow> d \<turnstile>\<^sub>R'(c,s1,ret1)\<Rightarrow>\<^bsup>x+y \<^esup> s3"
-
-code_pred rec_steps .
-
-declare rec_steps.intros[intro]
-declare rec_steps.cases[elim]
-
-lemmas rec_steps_induct = rec_steps.induct[split_format(complete)]
-
-lemma no_recs_no_step: "\<turnstile>\<^sub>R(c,s,ret) \<Rightarrow>\<^bsup>z \<^esup> (t,b) \<Longrightarrow> \<not>recs c \<Longrightarrow> \<not>b"
-  by (induction c s ret z t b rule: rec_step_induct) auto
-
-unbundle no rcom_syntax and com'_syntax
 
 lemma rnoninterference:
   "\<lbrakk>c'\<turnstile>\<^sub>R (c,s,ret) \<Rightarrow>\<^bsup>x \<^esup> t; set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> c'\<turnstile>\<^sub>R (c,s(v:=y),ret) \<Rightarrow>\<^bsup>x \<^esup> t(v:=y)"

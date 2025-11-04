@@ -2,178 +2,283 @@ theory GRecToTRec
   imports Com_Tagged
 begin
 
-unbundle rcom_syntax and no com'_syntax and no tscom_syntax
+unbundle tscom_tagged_syntax and no com'_syntax and no tscom_syntax
 
-(*1. Enumerate Recursive Calls *)
+fun term_point_count :: "tscom_tagged \<Rightarrow> nat" ("_ #Term")where
+   "(#IF b\<noteq>0 THEN c1 ELSE c2) #Term = c1 #Term + c2 #Term" 
+  |"(c1 #;; c2) #Term = c2 #Term" 
+  |"_ #Term= 1" 
 
-fun rec_call_count :: "com_tagged \<Rightarrow> nat" where
-   "rec_call_count ((#IF b\<noteq>0 THEN c1 ELSE c2)) = rec_call_count c1 + rec_call_count c2" 
-  |"rec_call_count (c1 #;; c2) =  rec_call_count c1 + rec_call_count c2" 
-  |"rec_call_count (#RECURSE n) = 1" 
-  |"rec_call_count _ = 0"
+fun ret_point_list :: "tscom_tagged \<Rightarrow> nat list" ("{ _ Ret\<rightharpoonup>i}")where
+   "{#IF b\<noteq>0 THEN c1 ELSE c2 Ret\<rightharpoonup>i} = {c1 Ret\<rightharpoonup>i} @ {c2 Ret\<rightharpoonup>i}" 
+  |"{c1 #;; c2 Ret\<rightharpoonup>i} = {c1 Ret\<rightharpoonup>i} @ {c2 Ret\<rightharpoonup>i}" 
+  |"{#Some i\<rightharpoonup> SKIP Ret\<rightharpoonup>i} = [i]" 
+  |"{#(Some i)\<rightharpoonup> _ ::= _ Ret\<rightharpoonup>i} = [i]" 
+  |"{#Some i\<rightharpoonup> CALL _ RETURN _ Ret\<rightharpoonup>i} = [i]" 
+  |"{#Some i\<rightharpoonup> TAIL Ret\<rightharpoonup>i} = [i]" 
+  |"{#Some i\<rightharpoonup> PUSH _ Ret\<rightharpoonup>i} = [i]" 
+  |"{#Some i\<rightharpoonup> POP _ Ret\<rightharpoonup>i} = [i]" 
+  |"{_ Ret\<rightharpoonup>i} = []" 
 
-fun rec_call_list :: "com_tagged \<Rightarrow> nat list" where
-   "rec_call_list ((#IF b\<noteq>0 THEN c1 ELSE c2)) = rec_call_list c1 @ rec_call_list c2" 
-  |"rec_call_list (c1 #;; c2) =  rec_call_list c1 @ rec_call_list c2" 
-  |"rec_call_list (#RECURSE n) = [n]" 
-  |"rec_call_list _ = []"
+(*1. Cut a command upto the first tail statement(s) syntactically and annotate its return point(s)*)
 
-fun enum_rec_calls_n :: "com_tagged \<Rightarrow> nat \<Rightarrow> com_tagged" where
-   "enum_rec_calls_n (ct1 #;; ct2) n = (enum_rec_calls_n ct1 n) #;; (enum_rec_calls_n ct2 (n + rec_call_count ct1))" 
-  |"enum_rec_calls_n (#IF b\<noteq>0 THEN ct1 ELSE ct2) n = (#IF b\<noteq>0 THEN (enum_rec_calls_n ct1 n) ELSE enum_rec_calls_n ct2 (n + rec_call_count ct1))" 
-  |"enum_rec_calls_n (#RECURSE m) n = #RECURSE n" 
-  |"enum_rec_calls_n (SKIPTagged m) n = (SKIPTagged 0)" 
-  |"enum_rec_calls_n c n = c"
+fun upto_rec_and_rest_syn :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> bool \<Rightarrow> tscom_tagged * tscom_tagged list" ("UPTO\<lbrakk> _ \<rbrakk> _ \<Zsurj> _" 55) where
+   "UPTO\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk> n \<Zsurj> B =
+    (let (ut1,r1) = UPTO\<lbrakk>c1\<rbrakk> n \<Zsurj> B in 
+      (let (ut2,r2) = UPTO\<lbrakk>c2\<rbrakk> (length r1 + n) \<Zsurj> B in 
+        (#IF b\<noteq>0 THEN ut1 ELSE ut2,r1@r2)))"
+  |"UPTO\<lbrakk>c1 #;; c2\<rbrakk> n \<Zsurj> B = 
+     (if stails_tagged c1 then 
+       (let (ut1,r1) = UPTO\<lbrakk>c1\<rbrakk> n \<Zsurj> True in (ut1, if r1 = [] then [c2] else map (\<lambda>x. x #;; c2) r1)) 
+      else 
+       (let (ut2,r2) = UPTO\<lbrakk>c2\<rbrakk> n \<Zsurj> B in
+         (c1 #;; ut2, r2)))" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> SKIP\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> SKIP,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> x ::= a\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> x ::= a,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> CALL c RETURN r \<rbrakk> n \<Zsurj> B= (#(if B then Some n else None)\<rightharpoonup> CALL c RETURN r ,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> TAIL\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> TAIL,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> PUSH v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> PUSH v,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> POP v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> POP v,[])" 
 
-lemma enum_rec_calls_n: "map int (rec_call_list (enum_rec_calls_n c n)) = 
-                        (if rec_call_count c = 0 then [] else [int n..int (n + rec_call_count c - 1)])"
-  apply (induction c n rule: enum_rec_calls_n.induct)
-          apply auto
-   apply (smt (z3) int_zle_neg nless_le upto_split1)
-  by (smt (verit, best) of_nat_0_less_iff upto_split1)
-
-abbreviation "enum_rec_calls c \<equiv> enum_rec_calls_n c 1"
-
-corollary enum_rec_calls: "map int (rec_call_list (enum_rec_calls c)) = 
-                        (if rec_call_count c = 0 then [] else [1..int (rec_call_count c)])"
-  using enum_rec_calls_n by simp
-
-(*2. List switch branches*)
-
-fun has_rec_call :: "com_tagged \<Rightarrow> bool" where
-   "has_rec_call (#RECURSE n) = True" 
-  |"has_rec_call (#IF b\<noteq>0 THEN ct1 ELSE ct2) = (has_rec_call ct1 \<or> has_rec_call ct2)"
-  |"has_rec_call (ct1 #;; ct2) = (has_rec_call ct1 \<or> has_rec_call ct2)" 
-  |"has_rec_call _ = False"
-
-fun switch_branch :: "com_tagged \<Rightarrow> com_tagged * com_tagged list" where
-   "switch_branch (#RECURSE n) = ((#RECURSE n),[])" 
-  |"switch_branch (#IF b\<noteq>0 THEN ct1 ELSE ct2) = 
-    (let (sb1,r1) = switch_branch ct1 in 
-      (let (sb2,r2) = switch_branch ct2 in 
-        (#IF b\<noteq>0 THEN sb1 ELSE sb2,r1@r2)))"
-  |"switch_branch (ct1 #;; ct2) = 
-     (if has_rec_call ct1 then 
-       (let (sb1,r1) = switch_branch ct1 in (sb1, if r1 = [] then [ct2] else map (\<lambda>x. x #;; ct2) r1)) else 
-       (let (sb2,r2) = switch_branch ct2 in
-         (ct1 #;; sb2, r2)))" 
-  |"switch_branch c = (c,[])" 
-
-
-lemma rest_size : "switch_branch c = (sb,rest) \<Longrightarrow> rc \<in> set rest \<Longrightarrow> size rc < size c"
-proof (induction c arbitrary: sb rest  rc rule: switch_branch.induct)
-  case (1 n)
-  then show ?case by auto
-next
-  case (2 b ct1 ct2)
-  obtain sb1 rest1 sb2 rest2 where "switch_branch ct1 = (sb1, rest1)" "switch_branch ct2 = (sb2, rest2)"
+lemma rest_size : "UPTO\<lbrakk>c\<rbrakk> n \<Zsurj> b = (sb,rest) \<Longrightarrow> rc \<in> set rest \<Longrightarrow> size rc < size c"
+proof (induction c n b arbitrary: sb rest  rc rule: upto_rec_and_rest_syn.induct)
+  case (1 b c1 c2 n B)
+  obtain sb1 rest1 sb2 rest2 
+    where "UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> B = (sb1, rest1)" "UPTO\<lbrakk> c2 \<rbrakk> (length rest1) + n \<Zsurj> B = (sb2, rest2)"
     by fastforce
-  have "rest = rest1@rest2" using \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>switch_branch ct2 = (sb2, rest2)\<close>
-      \<open>switch_branch (#IF b\<noteq>0 THEN ct1 ELSE ct2) = (sb, rest)\<close> by simp
+  have "rest = rest1@rest2" using \<open>UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> B = (sb1, rest1)\<close> \<open>UPTO\<lbrakk> c2 \<rbrakk> (length rest1) + n \<Zsurj> B = (sb2, rest2)\<close>
+      \<open>UPTO\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> n \<Zsurj> B = (sb, rest)\<close> by simp
   hence \<open>rc \<in> set rest1 \<or> rc \<in> set rest2\<close> 
-    using "2.prems"(2) by force
+    using "1.prems"(2) by force
   then show ?case apply (cases "rc \<in> set rest1")
     apply auto 
-    using "2.IH"(1) \<open>switch_branch ct1 = (sb1, rest1)\<close> apply force
-    by (simp add: "2.IH"(2) \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>switch_branch ct2 = (sb2, rest2)\<close> less_Suc_eq
+    using "1.IH"(1) \<open>UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> B = (sb1, rest1)\<close> apply force
+    by (simp add: "1.IH"(2) \<open>UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> B = (sb1, rest1)\<close> \<open>UPTO\<lbrakk> c2 \<rbrakk> (length rest1) + n \<Zsurj> B = (sb2, rest2)\<close> less_Suc_eq
         trans_less_add2)
 next
-  case (3 ct1 ct2)  obtain sb1 rest1 sb2 rest2 where "switch_branch ct1 = (sb1, rest1)" "switch_branch ct2 = (sb2, rest2)"
-    by fastforce
-  then show ?case proof(cases \<open>has_rec_call ct1\<close>)
+  case (2 c1 c2 n B) 
+  then show ?case proof(cases \<open>stails_tagged c1\<close>)
     case True
+    obtain sb1 rest1 
+    where "UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> True = (sb1, rest1)" 
+    by fastforce
     then show ?thesis proof(cases \<open>rest1 = []\<close>)
       case True
-      have \<open>switch_branch (ct1 #;; ct2) = (sb1, [ct2])\<close>  
-        using \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>has_rec_call ct1\<close> \<open>rest1 = []\<close> 
+      have \<open>UPTO\<lbrakk> c1 #;; c2 \<rbrakk> n \<Zsurj> B = (sb1, [c2])\<close>  
+        using \<open>UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> True = (sb1, rest1)\<close> \<open>stails_tagged c1\<close> \<open>rest1 = []\<close> 
         by simp
-      hence \<open>sb = sb1\<close> \<open>rest = [ct2]\<close>  
-        using "3.prems"(1) apply fastforce
-        using "3.prems"(1) \<open>switch_branch (ct1 #;; ct2) = (sb1, [ct2])\<close> by fastforce
-        hence \<open>rc = ct2\<close> 
-          using "3.prems"(2) by fastforce
+      hence \<open>sb = sb1\<close> \<open>rest = [c2]\<close>  
+        using "2.prems"(1) apply fastforce
+        using "2.prems"(1) \<open>UPTO\<lbrakk> c1 #;; c2 \<rbrakk> n \<Zsurj> B = (sb1, [c2])\<close> by fastforce
+        hence \<open>rc = c2\<close> 
+          using "2.prems"(2) by fastforce
       then show ?thesis 
         by auto
     next
       case False
-      have \<open>switch_branch (ct1 #;; ct2) = (sb1, map (\<lambda>x. x #;; ct2) rest1)\<close>
-        using \<open>switch_branch ct1 = (sb1, rest1)\<close> \<open>has_rec_call ct1\<close> \<open>rest1 \<noteq> []\<close>
+      have \<open>UPTO\<lbrakk> c1 #;; c2 \<rbrakk> n \<Zsurj> B = (sb1, map (\<lambda>x. x #;; c2) rest1)\<close>
+        using \<open>UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> True = (sb1, rest1)\<close> \<open>stails_tagged c1\<close> \<open>rest1 \<noteq> []\<close>
         by simp
-      hence \<open>sb = sb1\<close> \<open>rest = map (\<lambda>x. x #;; ct2) rest1\<close>  
-        using "3.prems"(1) apply fastforce
-        using "3.prems"(1) \<open>switch_branch (ct1 #;; ct2) = (sb1, map (\<lambda>x. x #;; ct2) rest1)\<close>
+      hence \<open>sb = sb1\<close> \<open>rest = map (\<lambda>x. x #;; c2) rest1\<close>  
+        using "2.prems"(1) apply fastforce
+        using "2.prems"(1) \<open>UPTO\<lbrakk> c1 #;; c2 \<rbrakk> n \<Zsurj> B = (sb1, map (\<lambda>x. x #;; c2) rest1)\<close>
         by force
-      hence \<open>rc \<in> set (map (\<lambda>x. x #;; ct2) rest1)\<close>
-        using "3.prems"(2) by fastforce
-      have \<open>\<forall>x. x \<in> set rest1 \<longrightarrow> size x \<le> size ct1\<close>
-        by (simp add: "3.IH"(1) True \<open>switch_branch ct1 = (sb1, rest1)\<close> order_le_less)
-      hence \<open>\<forall>x. x \<in> set (map (\<lambda>x. x #;; ct2) rest1) \<longrightarrow> size x \<le> size (ct1 #;; ct2)\<close>
+      hence \<open>rc \<in> set (map (\<lambda>x. x #;; c2) rest1)\<close>
+        using "2.prems"(2) by fastforce
+      have \<open>\<forall>x. x \<in> set rest1 \<longrightarrow> size x \<le> size c1\<close>
+        by (simp add: "2.IH"(1) True \<open>UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> True = (sb1, rest1)\<close> order_le_less)
+      hence \<open>\<forall>x. x \<in> set (map (\<lambda>x. x #;; c2) rest1) \<longrightarrow> size x \<le> size (c1 #;; c2)\<close>
         by auto
-      then show ?thesis using \<open>rc \<in> set (map (\<lambda>x. x #;; ct2) rest1)\<close> \<open>\<forall>x. x \<in> set (map (\<lambda>x. x #;; ct2) rest1) \<longrightarrow> size x \<le> size (ct1 #;; ct2)\<close>
-        using "3.IH"(1) True \<open>switch_branch ct1 = (sb1, rest1)\<close> by force
+      then show ?thesis using \<open>rc \<in> set (map (\<lambda>x. x #;; c2) rest1)\<close> \<open>\<forall>x. x \<in> set (map (\<lambda>x. x #;; c2) rest1) \<longrightarrow> size x \<le> size (c1 #;; c2)\<close>
+        using "2.IH"(1) True \<open>UPTO\<lbrakk> c1 \<rbrakk> n \<Zsurj> True = (sb1, rest1)\<close> by force
     qed
   next
     case False
-    then show ?thesis sorry
+    obtain sb2 rest2 
+      where "UPTO\<lbrakk> c2 \<rbrakk> n \<Zsurj> B = (sb2, rest2)"
+    by fastforce
+    have \<open>UPTO\<lbrakk> c1 #;; c2 \<rbrakk> n \<Zsurj> B = (c1  #;; sb2, rest2)\<close>
+      using False \<open>UPTO\<lbrakk> c2 \<rbrakk> n \<Zsurj> B = (sb2, rest2)\<close> by auto
+    hence \<open>rest = rest2\<close>
+      using "2.prems"(1) by auto
+    hence \<open>rc \<in> set rest2\<close> using \<open>rc \<in> set rest\<close> by simp
+    then show ?thesis 
+      using "2.IH"(2) False \<open>UPTO\<lbrakk> c2 \<rbrakk> n \<Zsurj> B = (sb2, rest2)\<close>
+      by fastforce
   qed
 qed auto
 
-function switch_branches_bfs :: "com_tagged \<Rightarrow> com_tagged list" where
- "switch_branches_bfs c = (let (csb,rest) = switch_branch c in 
+(* 2. Recursively cut the return points until there are no return points left and accumulate the subprograms in a list *)
+function upto_rec_and_rest_syn_bfs :: "tscom_tagged \<Rightarrow>tscom_tagged list" ("UPTO\<lbrace> _ \<rbrace>" 55)where
+ "upto_rec_and_rest_syn_bfs c  = (let (csb,rest) = UPTO\<lbrakk> c \<rbrakk> 0 \<Zsurj> False in 
       (case rest of [] \<Rightarrow> [csb] 
-                   | sb#sbs \<Rightarrow> csb #  concat (map (switch_branches_bfs) (sb#sbs))))"
+                   | sb#sbs \<Rightarrow> csb #  concat (map  upto_rec_and_rest_syn_bfs (sb#sbs))))"
   by auto
 
-termination switch_branches_bfs using rest_size 
+termination upto_rec_and_rest_syn_bfs using rest_size 
   by (metis "termination" in_measure wf_measure)
 
+(* 2. Assign a unique return point index its corresponding termination point*)
 
-(*3. Denote call termination points with annotated skips*)
+fun ret_point_count :: "tscom_tagged \<Rightarrow> nat" ("_ #Ret")where
+   "(#IF b\<noteq>0 THEN c1 ELSE c2) #Ret = c1 #Ret + c2 #Ret" 
+  |"(c1 #;; c2) #Ret = c2 #Ret" 
+  |"#Some i\<rightharpoonup> SKIP #Ret = 1" 
+  |"(#(Some i)\<rightharpoonup> x ::= a) #Ret = 1" 
+  |"#Some i\<rightharpoonup> CALL c RETURN r #Ret = 1"
+  |"#Some i\<rightharpoonup> TAIL #Ret = 1"
+  |"#Some i\<rightharpoonup> PUSH v #Ret = 1"
+  |"#Some i\<rightharpoonup> POP v #Ret = 1"
+  |"_ #Ret = 0"
 
-fun add_pop_skips :: "com_tagged \<Rightarrow> com_tagged" where
- "add_pop_skips (#RECURSE n) = (#RECURSE n)" |
- "add_pop_skips (ct1 #;; ct2) = (ct1 #;; add_pop_skips ct2)" |
- "add_pop_skips (#IF b\<noteq>0 THEN ct1 ELSE ct2) = (#IF b\<noteq>0 THEN add_pop_skips ct1 ELSE add_pop_skips ct2)" |
- "add_pop_skips c = (c #;; SKIPTagged 1)"
+fun enum_ret_points_n :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> tscom_tagged" ("_ \<diamondop>Ret _") where
+   "(ct1 #;; ct2) \<diamondop>Ret i = ct1 #;; (ct2 \<diamondop>Ret i)" 
+  |"(#IF b\<noteq>0 THEN ct1 ELSE ct2) \<diamondop>Ret i = (#IF b\<noteq>0 THEN (ct1 \<diamondop>Ret i) ELSE (ct2 \<diamondop>Ret (i + ct1 #Ret)))" 
+  |"#Some j\<rightharpoonup> SKIP \<diamondop>Ret i = #Some i\<rightharpoonup> SKIP" 
+  |"(#(Some j) \<rightharpoonup> x ::= a) \<diamondop>Ret i = #(Some i) \<rightharpoonup> x ::= a" 
+  |"#Some j\<rightharpoonup> CALL c RETURN r \<diamondop>Ret i = #Some i\<rightharpoonup> CALL c RETURN r" 
+  |"#Some j\<rightharpoonup> TAIL \<diamondop>Ret i = (#Some i\<rightharpoonup> TAIL)" 
+  |"#Some j\<rightharpoonup> PUSH v \<diamondop>Ret i = (#Some i\<rightharpoonup> PUSH v)" 
+  |"#Some j\<rightharpoonup> POP v \<diamondop>Ret i = (#Some i\<rightharpoonup> POP v)" 
+  |"c \<diamondop>Ret i = c"
 
-unbundle tscom_syntax and no com'_syntax and no rcom_syntax
+fun enum_ret_points_list_n :: "tscom_tagged list \<Rightarrow> nat \<Rightarrow> tscom_tagged list" ("_ \<diamondop>Ret* _") where
+   "[] \<diamondop>Ret* n = []" 
+  |"(c#cs) \<diamondop>Ret* n = (c \<diamondop>Ret n) # (cs \<diamondop>Ret* (n + c #Ret))" 
 
-(*Add stack and tail recursive call commands*)
+lemma upto_rec_and_rest_synes_invar: "b \<in> set (upto_rec_and_rest_syn_bfs c) \<Longrightarrow>  tagged_invar b"
+proof (induction c arbitrary: b rule: upto_rec_and_rest_syn_bfs.induct)
+  case (1 c)
+  obtain csb rest where "upto_rec_and_rest_syn c = (csb,rest)"
+    by fastforce
+  have \<open>tagged_invar csb\<close> 
+    using \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> upto_rec_and_rest_syn_invar by simp 
+  then show ?case proof(cases rest)
+    case Nil
+    then show ?thesis 
+      by (metis (lifting) "1.prems" \<open>tagged_invar csb\<close> \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> list.distinct(1) list.set_cases list.simps(4) old.prod.case
+          set_ConsD upto_rec_and_rest_syn_bfs.elims)
+  next
+    case (Cons sb sbs)
+    have IH': \<open>\<forall>xb yb. (xb \<in> set (sb # sbs) \<longrightarrow> yb \<in> set (upto_rec_and_rest_syn_bfs xb) \<longrightarrow> tagged_invar yb)\<close>
+      using "1.IH" \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> local.Cons by presburger
+    have SBC2: \<open>upto_rec_and_rest_syn_bfs c =  csb #  concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs))\<close> 
+      by (metis (no_types, lifting) \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> list.simps(5) local.Cons old.prod.case upto_rec_and_rest_syn_bfs.simps)
+    hence \<open>b \<in> set (csb #  concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs)))\<close> 
+      using "1.prems" by presburger
+    from IH' have IH'': "\<forall>y \<in> set (concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs))). tagged_invar y" sorry
+    from IH'' \<open>b \<in> set (csb #  concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs)))\<close> \<open>tagged_invar csb\<close> show ?thesis 
+      by (metis set_ConsD)
+  qed
+qed
 
-fun add_stack_coms :: "com_tagged \<Rightarrow> vname list \<Rightarrow> vname \<Rightarrow> com_tagged" where 
- "add_stack_coms (#RECURSE n) pvars pc = 
-                            push_many_tagged pvars #;;
-                            pc #::= A (N n) #;;
-                            #PUSH pc #;;
-                            pc #::= A (N 1) #;; 
-                            TailTagged" 
-|"add_stack_coms (SKIPTagged (Suc 0)) pvars pc = 
-                            pop_many_tagged pvars #;;
-                            #POP pc #;; 
-                            TailTagged"
-|"add_stack_coms (ct1 #;; ct2) pvars pc = (ct1 #;; add_stack_coms ct2 pvars pc)" 
-|"add_stack_coms (#IF b\<noteq>0 THEN ct1 ELSE ct2) pvars pc = 
-  (#IF b\<noteq>0 THEN add_stack_coms ct1 pvars pc ELSE add_stack_coms ct2 pvars pc)" 
-|"add_stack_coms c pvars pc = c" 
+(* 3. Assign the return point to the program counter after a termination point and 
+  push the return point index to the program counter stack in case of a recursive call *)
 
-abbreviation "branch_to_trec c pvars pc\<equiv> (add_stack_coms (add_pop_skips c) pvars pc)"
+unbundle tscom_tagged_syntax and no com'_syntax and no rcom_tagged_syntax
 
-abbreviation "branches_to_trec \<equiv> map branch_to_trec"
+definition "max_pc_value c \<equiv> (length (UPTO\<lbrace> c \<rbrace> \<diamondop>Ret* 0 ))"
 
-abbreviation "call_start (c:: rcom) pc branch_count \<equiv> (IF pc = 0 THEN (
-                                        push_many ((vars c)) ;; 
-                                        ( pc ::= A (N (branch_count + 1))) ;;
+fun add_stack_coms :: "tscom_tagged \<Rightarrow> vname \<Rightarrow> tscom_tagged" ("\<lblot>STACK _ PC _ \<rblot>")where 
+ "add_stack_coms (ct1 #;; ct2) pc = (ct1 #;; add_stack_coms ct2 pc)" 
+|"add_stack_coms (#IF b\<noteq>0 THEN ct1 ELSE ct2) pc =
+  (#IF b\<noteq>0 THEN add_stack_coms ct1 pc ELSE add_stack_coms ct2 pc)" 
+(*Recursive call with return point*)
+|"add_stack_coms (#Some i\<rightharpoonup> TAIL) pc  = 
+                            (#None \<rightharpoonup> pc ::= A (N i)) #;;
+                            #None \<rightharpoonup> PUSH pc #;;
+                            (#None \<rightharpoonup> pc ::= A (N 1)) #;; 
+                            (#None \<rightharpoonup> TAIL)" 
+(*Tail recursive call. Returns to a termination point*)
+|"add_stack_coms (#None\<rightharpoonup> TAIL) pc = (#None\<rightharpoonup> TAIL)" 
+(*Return points*)
+|"add_stack_coms (#Some i\<rightharpoonup> SKIP) pc = 
+                            (#None\<rightharpoonup> SKIP) #;;
+                            (#None \<rightharpoonup> pc ::= A (N i)) #;;
+                            (#None \<rightharpoonup> TAIL)"
+|"add_stack_coms (#(Some i) \<rightharpoonup> x ::= a) pc = 
+                            (#None\<rightharpoonup> x ::= a) #;;
+                            (#None \<rightharpoonup> pc ::= A (N i)) #;;
+                            (#None \<rightharpoonup> TAIL)"
+|"add_stack_coms (#Some i\<rightharpoonup> CALL v RETURN r) pc = 
+                            (#None\<rightharpoonup> CALL v RETURN r) #;;
+                            (#None \<rightharpoonup> pc ::= A (N i)) #;;
+                            (#None \<rightharpoonup> TAIL)"
+(*Termination points*)
+|"add_stack_coms c pc =      c #;;
+                            #None \<rightharpoonup>POP pc #;; 
+                            (#None \<rightharpoonup> TAIL)"
+
+(*4. Initialize the program counter stack with the program exit value.
+     Initialize program counter with program start value. *)
+
+definition "call_start (c:: tscom) pc max_pc_value ret \<equiv> (IF pc = 0 THEN (
+                                        (pc ::= A (N (max_pc_value + 1))) ;;
                                         PUSH pc ;;
                                         (pc ::= A (N 1)) 
                                   )ELSE tsSKIP)"
 
+(*5. Reset pc to 0 *)
+definition "reset_pc pc \<equiv> pc ::= A (N 0)"
 
-abbreviation "grec_to_trec (c :: rcom) pc \<equiv> call_start c pc ;;
-                                  (switch_basic pc 
-                                   (map (branch_to_trec (vars c))
-                                    (switch_branches_bfs c)))"
+(* Give more structure and prove some modules that make sense*)
+(* Include unique variables in the original program *)
 
-(* optimize later *)
-(* do each step seperatly, prove its specification *)
+definition "grec_to_trec c pc ret \<equiv> (
+  let annot_rcom = (\<lambda>x. ident_tail_calls (enum_rec_calls (tag_rcom x))) in 
+   let return_point_branches = (\<lambda>x. upto_rec_and_rest_syn_bfs x) in
+    let branches_to_tscom = (\<lambda>x. (map untag_tscom (map (\<lambda>x. add_stack_coms x (vars_to_stack c ret) pc) (map rcom_tagged_to_ts_com_tagged (map add_pop_skips x))))) in
+  (call_start c pc (max_pc_value c) ret) ;;
+  (switch_basic pc (branches_to_tscom (return_point_branches (annot_rcom c))) ;;
+   reset_pc pc))"
+
+
+theorem grec_to_trec_correct_gen:
+(* Generalize pc.*)
+  assumes "pc \<notin> set (vars c)"
+  shows "c \<turnstile> (c,s,ret) \<Rightarrow>\<^bsup> t \<^esup> s' \<Longrightarrow> 
+       \<exists>t .grec_to_trec c pc ret \<turnstile> (grec_to_trec c pc ret,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack)"
+proof(induction c arbitrary: s ret t s')
+  case rSKIP
+  then show ?case sorry
+next
+  case (rAssign x1 x2)
+  then show ?case sorry
+next
+  case (rSeq c1 c2)
+  then show ?case unfo  
+next
+  case (rIf x1 c1 c2)
+  then show ?case sorry
+next
+  case (rCall x1 x2)
+  then show ?case sorry
+next
+  case rRec
+  then show ?case sorry
+qed
+  case (rSkip c s ret)
+  then show ?case sorry
+next
+  case (rAssign c x a s ret)
+  then show ?case sorry
+next
+  case (rSeq c c1 s1 ret x s2 c2 y s3 z)
+  then show ?case sorry
+next
+  case (rIfTrue s b c c1 ret x t y c2)
+  then show ?case sorry
+next
+  case (rIfFalse s b c c2 ret x t y c1)
+  then show ?case sorry
+next
+  case (rCall C s z t c r ret)
+  then show ?case sorry
+next
+  case (rRec c s ret z t)
+  then show ?case sorry
+qed
+
+(* do each step seperately, prove its specification *)
 
 end

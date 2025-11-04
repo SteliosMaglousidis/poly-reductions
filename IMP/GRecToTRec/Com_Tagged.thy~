@@ -170,17 +170,6 @@ fun untag_tscom :: "tscom_tagged \<Rightarrow> tscom" ("#\<lbrakk> _ \<rbrakk>\<
 lemma tscom_tag_correct : "untag_tscom (tag_tscom c) = c"
   by (induction c rule: tag_tscom.induct) fastforce+
 
-fun no_rp :: "tscom_tagged \<Rightarrow> bool" where
-  "no_rp (ct1 #;; ct2) \<longleftrightarrow> no_rp ct1 \<and> no_rp ct2" |
-  "no_rp (#IF b\<noteq>0 THEN ct1 ELSE ct2) \<longleftrightarrow> no_rp ct1 \<and> no_rp ct2" |
-  "no_rp (#None\<rightharpoonup> TAIL) \<longleftrightarrow> True" |
-  "no_rp (#None\<rightharpoonup> SKIP) \<longleftrightarrow> True" |
-  "no_rp (#None\<rightharpoonup> x ::= a) \<longleftrightarrow> True" |
-  "no_rp (#None\<rightharpoonup>CALL v RETURN r) \<longleftrightarrow> True"|
-  "no_rp (#None\<rightharpoonup>PUSH v) \<longleftrightarrow> True" |
-  "no_rp (#None\<rightharpoonup>POP v) \<longleftrightarrow> True" |
-  "no_rp _ \<longleftrightarrow> False" 
-
 fun stails_tagged :: "tscom_tagged \<Rightarrow> bool" where
   "stails_tagged #n\<rightharpoonup> TAIL \<longleftrightarrow> True" |
   "stails_tagged (c1#;;c2) \<longleftrightarrow> stails_tagged c1 \<or> stails_tagged c2" |

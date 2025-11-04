@@ -1,0 +1,22 @@
+theory GRecToTRecOpt
+  imports GRecToTRec
+begin
+
+abbreviation "vars_set c \<equiv> set (vars c)"
+
+abbreviation "vars_to_stack_opt c ret \<equiv> sorted_list_of_set (vars_set c)"
+
+abbreviation "grec_to_trec_opt c pc ret \<equiv> 
+  (call_start c pc (max_pc_value c) ret) ;;
+  (switch_basic pc
+  (map untag_tscom 
+  (map (\<lambda>x. add_stack_coms x (vars_to_stack_opt c ret) pc)
+  (map rcom_tagged_to_ts_com_tagged
+  (map add_pop_skips 
+  (switch_branches_bfs
+  (den_tail_calls 
+  (enum_rec_calls 
+  (tag_rcom c)))))))))"
+
+
+end

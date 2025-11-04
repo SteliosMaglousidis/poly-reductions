@@ -1,0 +1,58 @@
+theory ProofLanguage
+  imports Com_Tagged
+begin
+
+
+unbundle no com_syntax and com'_syntax
+
+declare [[syntax_ambiguity_warning=false]]
+
+type_synonym stack = "val list" 
+
+type_synonym fstack = "vname \<Rightarrow> stack"
+
+text "Syntactic sugar to write stacks:"
+definition empty_stack ("<[]>") where
+  "empty_stack \<equiv> \<lambda>x. []"
+
+fun push_many_stack :: "fstack \<Rightarrow> state \<Rightarrow> vname list \<Rightarrow> fstack" where
+"push_many_stack stack s [] = stack" |
+"push_many_stack stack s (v#vs) = push_many_stack (stack(v := s v # stack v)) s vs"
+
+fun pop_many_stack :: "fstack \<Rightarrow> vname list \<Rightarrow> fstack" where
+"pop_many_stack stack [] = stack" |
+"pop_many_stack stack (v#vs) = 
+  (case stack v of [] \<Rightarrow> pop_many_stack stack vs 
+               | sv#svs \<Rightarrow> pop_many_stack (stack(v := svs)) vs)"
+
+fun pop_many_state :: "state \<Rightarrow> fstack \<Rightarrow> vname list \<Rightarrow> state" where
+"pop_many_state s stack [] = s" |
+"pop_many_state s stack (v#vs) = 
+  (case stack v of [] \<Rightarrow> pop_many_state s stack vs 
+               | sv#svs \<Rightarrow> pop_many_state (s(v := sv)) (stack(v := svs)) vs)"
+
+datatype
+  pcom = pSKIP
+      | pAssign vname aexp
+      | pSeq    tscom  tscom
+      | pIf     vname tscom tscom
+      | pCall   com vname
+      | pREC
+      | pPush  vname 
+      | pPop  vname 
+
+open_bundle pcom_syntax begin
+notation tsAssign ("_ ::= _" [1000, 61] 61)  and
+         tsSeq ("_;;/ _"  [60, 61] 60) and
+         tsIf ("(IF _/\<noteq>0 THEN _/ ELSE _)"  [0, 0, 61] 61) and
+         tsCall ("CALL _ RETURN _") and
+         tsPush ("PUSH _" [61] 61) and
+         tsPop ("POP _" [61] 61)
+end
+unbundle no com'_syntax 
+
+
+
+
+
+end

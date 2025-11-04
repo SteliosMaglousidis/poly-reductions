@@ -1,16 +1,23 @@
-session General_Recursive_IMP in General_Recursive_IMP = "IMP" + 
+session General_Recursive_IMP in "GRecToTRec/General_Recursive_IMP" = "IMP" + 
   sessions
     "HOL-Library"
   theories
     IMP_GRec
 
-session Tail_Recursive_IMP_Stack in Tail_Recursive_IMP_Stack = "IMP" + 
+session Tail_Recursive_IMP_Stack in "GRecToTRec/Tail_Recursive_IMP_Stack" = "IMP" + 
   sessions
     "HOL-Library"
   theories
     IMP_Tailcall_Stacked
 
-session IMP = "IMP-" +
+session GrecToTRec in GRecToTRec = "General_Recursive_IMP" +
+  sessions
+    "Tail_Recursive_IMP_Stack"
+    "HOL-Library"
+  theories
+    GRecToTRec
+
+session eIMP = "IMP-" +
   sessions 
     "HOL-Eisbach"
   theories

@@ -1,0 +1,65 @@
+theory Stack_Rcom
+  imports GRecToTRec "Tail_Recursive_IMP_Stack/Stack_Memory"
+begin
+
+unbundle rcom_syntax'
+                
+fun stack_rcom :: "rcom \<Rightarrow> vname list \<Rightarrow> tscom" ("\<lblot>_ STACK _\<rblot>") where 
+  "\<lblot>(IF\<^sub>R b\<noteq>0 THEN c1 ELSE c2) STACK vs\<rblot> = (IF b\<noteq>0 THEN \<lblot>c1 STACK vs\<rblot> ELSE \<lblot>c2 STACK vs\<rblot>)"
+| "\<lblot>c1 ;;\<^sub>R c2 STACK vs\<rblot> = (\<lblot>c1 STACK vs\<rblot> ;; \<lblot>c2 STACK vs\<rblot>)"
+| "\<lblot>RECURSE STACK vs\<rblot> = (PUSHMANY vs ;; TAIL ;; POPMANY vs)"
+| "\<lblot>rSKIP STACK vs\<rblot> = SKIP"
+| "\<lblot>CALL\<^sub>R c RETURN r STACK vs\<rblot> = CALL c RETURN r"
+| "\<lblot>x ::=\<^sub>R a STACK vs\<rblot> = x ::= a"
+
+abbreviation grec_context :: "rcom \<Rightarrow> vname \<Rightarrow> vname list"  ("\<Gamma>[_]\<rightarrow>_") where
+"grec_context c ret \<equiv> removeAll ret (vars c)"
+
+lemma stacked_rcom_vars: "set (vars \<lblot>c STACK vs\<rblot>) \<subseteq> (set (vars c) \<union> set vs)"
+  by (induction c vs rule: stack_rcom.induct) (auto simp add: push_many_vars pop_many_vars)
+
+lemma stacked_rcom_vars': "set (vars \<lblot>c STACK vs\<rblot>) \<supseteq> set (vars c)"
+  by (induction c vs rule: stack_rcom.induct) (auto simp add: push_many_vars pop_many_vars)
+
+corollary stacked_rcom_context_vars: "set (vars \<lblot>c STACK (\<Gamma>[c]\<rightarrow>ret)\<rblot>) = set (vars c)"
+  using stacked_rcom_vars[of c "(\<Gamma>[c]\<rightarrow>ret)"] stacked_rcom_vars'[of c "(\<Gamma>[c]\<rightarrow>ret)"] by auto
+
+lemma override_on_context: "t = override_on s t S \<Longrightarrow> override_on t s (S - {v}) = s(v := t v)"
+  unfolding override_on_def fun_upd_def apply auto by metis
+
+theorem stack_memory: "c' \<turnstile>\<^sub>R (c,s,ret) \<Rightarrow>\<^bsup>t\<^esup> s' \<Longrightarrow> 
+        \<exists>t'. \<lblot>c' STACK (\<Gamma>[c']\<rightarrow>ret)\<rblot> 
+          \<turnstile> (\<lblot>c STACK (\<Gamma>[c']\<rightarrow>ret)\<rblot>,s,stack) \<Rightarrow>\<^bsup>t'\<^esup> (s',stack)"
+proof(induction c' c s ret t s' arbitrary: stack  rule: rbig_step_t_induct)
+  case (rAssign c x a s ret)
+  then show ?case 
+    using stack_rcom.simps(6) tAssign by (metis tsbig_step_t.tAssign)
+next
+  case (rCall C s z t c r ret)
+  then show ?case 
+    using stack_rcom.simps(5) tCall  by (metis tsbig_step_t.tCall)
+next
+  case (rRec c s ret z t)
+  have \<open>\<lblot>RECURSE STACK (\<Gamma>[c]\<rightarrow>ret)\<rblot> = (PUSHMANY (\<Gamma>[c]\<rightarrow>ret) ;; TAIL ;; POPMANY (\<Gamma>[c]\<rightarrow>ret))\<close>
+    by simp
+  have \<open>\<lblot>c STACK (\<Gamma>[c]\<rightarrow>ret)\<rblot> \<turnstile> 
+       (PUSHMANY (\<Gamma>[c]\<rightarrow>ret), s, stack) \<Rightarrow>\<^bsup>Suc (length (\<Gamma>[c]\<rightarrow>ret))\<^esup>  (s, push_many_stack stack s (\<Gamma>[c]\<rightarrow>ret))\<close>
+    using push_many_sem by blast
+  obtain t' where \<open>\<lblot>c STACK (\<Gamma>[c]\<rightarrow>ret)\<rblot> \<turnstile> (\<lblot>c STACK (\<Gamma>[c]\<rightarrow>ret)\<rblot>, s, push_many_stack stack s (\<Gamma>[c]\<rightarrow>ret)) 
+                    \<Rightarrow>\<^bsup>t'\<^esup>  (t, push_many_stack stack s (\<Gamma>[c]\<rightarrow>ret))\<close>
+    using rRec.IH by blast
+  hence \<open>\<lblot>c STACK (\<Gamma>[c]\<rightarrow>ret)\<rblot> \<turnstile> (TAIL, s, push_many_stack stack s (\<Gamma>[c]\<rightarrow>ret)) \<Rightarrow>\<^bsup>5 + t'\<^esup>  (t, push_many_stack stack s (\<Gamma>[c]\<rightarrow>ret))\<close>
+    by blast
+  have \<open>\<lblot>c STACK (\<Gamma>[c]\<rightarrow>ret)\<rblot> \<turnstile> (POPMANY (\<Gamma>[c]\<rightarrow>ret), t, push_many_stack stack s (\<Gamma>[c]\<rightarrow>ret)) 
+          \<Rightarrow>\<^bsup>Suc (length ((\<Gamma>[c]\<rightarrow>ret)))\<^esup>  (override_on t s (set (\<Gamma>[c]\<rightarrow>ret)), stack)\<close>
+    using stack_memory_many by blast
+  have \<open>t = override_on s t (set (vars c))\<close> 
+    by (metis
+        \<open>\<lblot>c STACK \<Gamma>[c]\<rightarrow>ret\<rblot> \<turnstile> (\<lblot>c STACK \<Gamma>[c]\<rightarrow>ret\<rblot>, s, push_many_stack stack s \<Gamma>[c]\<rightarrow>ret) \<Rightarrow>\<^bsup>t'\<^esup> (t, push_many_stack stack s \<Gamma>[c]\<rightarrow>ret)\<close>
+        stacked_rcom_context_vars stacked_rcom_vars' tsnoninterference_override_on)
+  have \<open>override_on t s (set (\<Gamma>[c]\<rightarrow>ret)) = s(ret := t ret)\<close> using override_on_context[OF t = override_on s t (set (vars c))]
+  then show ?case 
+qed fastforce+
+
+
+end

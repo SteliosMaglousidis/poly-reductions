@@ -35,10 +35,12 @@ fun upto_rec_and_rest_syn :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> bool 
          (c1 #;; ut2, r2)))" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> SKIP\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> SKIP,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> x ::= a\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> x ::= a,[])" 
-  |"UPTO\<lbrakk>#i\<rightharpoonup> CALL c RETURN r \<rbrakk> n \<Zsurj> B= (#(if B then Some n else None)\<rightharpoonup> CALL c RETURN r ,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> CALL c RETURN r \<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> CALL c RETURN r ,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> TAIL\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> TAIL,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> PUSH v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> PUSH v,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> POP v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> POP v,[])" 
+
+term "(#IF b\<noteq>0 THEN TAIL ELSE c2) ;; c3"
 
 declare upto_rec_and_rest_syn.elims[elim]
 
@@ -216,8 +218,11 @@ fun add_stack_coms :: "tscom_tagged \<Rightarrow> vname \<Rightarrow> tscom_tagg
 (*4. Initialize the program counter stack with the program exit value.
      Initialize program counter with program start value. *)
 
-definition "call_start (c:: tscom) pc max_pc_value ret \<equiv> (IF pc = 0 THEN (
-                                        (pc ::= A (N (max_pc_value + 1))) ;;
+
+unbundle tscom_syntax and no com'_syntax and no rcom_syntax
+
+definition "call_start c pc \<equiv> (IF pc = 0 THEN (
+                                        (pc ::= A (N (max_pc_value c + 1))) ;;
                                         PUSH pc ;;
                                         (pc ::= A (N 1)) 
                                   )ELSE tsSKIP)"
@@ -228,21 +233,19 @@ definition "reset_pc pc \<equiv> pc ::= A (N 0)"
 (* Give more structure and prove some modules that make sense*)
 (* Include unique variables in the original program *)
 
-definition "grec_to_trec c pc ret \<equiv> (
-  let annot_rcom = (\<lambda>x. ident_tail_calls (enum_rec_calls (tag_rcom x))) in 
-   let return_point_branches = (\<lambda>x. upto_rec_and_rest_syn_bfs x) in
-    let branches_to_tscom = (\<lambda>x. (map untag_tscom (map (\<lambda>x. add_stack_coms x (vars_to_stack c ret) pc) (map rcom_tagged_to_ts_com_tagged (map add_pop_skips x))))) in
-  (call_start c pc (max_pc_value c) ret) ;;
-  (switch_basic pc (branches_to_tscom (return_point_branches (annot_rcom c))) ;;
+definition "grec_to_trec c pc \<equiv> (
+   let return_point_branches = (\<lambda>x. upto_rec_and_rest_syn_bfs #\<lbrakk> x \<rbrakk>) in
+    let branches_to_tscom = (\<lambda>x. (map untag_tscom (map (\<lambda>x. add_stack_coms x pc) x))) in
+  (call_start #\<lbrakk> c \<rbrakk> pc ) ;;
+  (switch_basic pc (branches_to_tscom (return_point_branches (c))) ;;
    reset_pc pc))"
-
 
 theorem grec_to_trec_correct_gen:
 (* Generalize pc.*)
   assumes "pc \<notin> set (vars c)"
-  shows "c \<turnstile> (c,s,ret) \<Rightarrow>\<^bsup> t \<^esup> s' \<Longrightarrow> 
-       \<exists>t .grec_to_trec c pc ret \<turnstile> (grec_to_trec c pc ret,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack)"
-proof(induction c arbitrary: s ret t s')
+  shows "c \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack') \<Longrightarrow> 
+       \<exists>t . ((grec_to_trec c pc) \<turnstile> (grec_to_trec c pc,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack))"
+proof(induction c arbitrary: s stack t s' stack')
   case rSKIP
   then show ?case sorry
 next
