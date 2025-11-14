@@ -243,9 +243,15 @@ fun push_many :: "vname list \<Rightarrow> tscom" ("(PUSHMANY _ )"  [61] 61) whe
 "push_many [] = tsSKIP" |
 "push_many (v#vs) = (PUSH v) ;; push_many vs" 
 
+lemma push_many_vars: "vars (PUSHMANY vs) = vs"
+  by (induction vs rule: push_many.induct) auto
+
 fun pop_many :: "vname list \<Rightarrow> tscom" ("(POPMANY _ )"  [61] 61) where
 "pop_many [] = tsSKIP" |
 "pop_many (v#vs) = (POP v) ;; pop_many vs" 
+
+lemma pop_many_vars: "vars (POPMANY vs) = vs"
+  by (induction vs rule: pop_many.induct) auto
 
 lemma push_many_empty_sem: "(c \<turnstile> (PUSHMANY [],s,stack)  \<Rightarrow>\<^bsup> Suc 0 \<^esup> (s,stack))"
   by auto

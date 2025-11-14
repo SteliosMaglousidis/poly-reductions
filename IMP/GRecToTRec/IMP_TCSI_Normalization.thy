@@ -1,0 +1,73 @@
+theory IMP_TCSI_Normalization
+  imports IMP_TCS_Intermediate
+begin
+
+fun append_tscom_tagged :: "tscom_tagged \<Rightarrow> tscom_tagged \<Rightarrow> tscom_tagged"  where 
+   "append_tscom_tagged (#IF b\<noteq>0 THEN c1 ELSE c2) c = (#IF b\<noteq>0 THEN append_tscom_tagged c1 c ELSE append_tscom_tagged c2 c)" 
+  |"append_tscom_tagged (c1 #;; c2) c = (c1 #;; append_tscom_tagged c2 c)" 
+  |"append_tscom_tagged c' c = c' #;; c" 
+
+declare append_tscom_tagged.elims[elim]
+
+lemma append_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c1#;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (append_tscom_tagged c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom_tagged.induct)
+  apply auto 
+  by fastforce+
+
+lemma append_complete: "c' \<turnstile>Rec\<rightharpoonup>i (append_tscom_tagged c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c1#;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom_tagged.induct)
+  apply auto 
+  by fastforce+
+
+corollary append_correct: "c' \<turnstile>Rec\<rightharpoonup>i (append_tscom_tagged c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)
+                            \<equiv> c' \<turnstile>Rec\<rightharpoonup>i (c1#;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
+  by (smt (verit) append_complete append_sound)
+
+fun normalize_branching :: "tscom_tagged \<Rightarrow> tscom_tagged" ("NORM _ ") where 
+   "NORM (#IF b\<noteq>0 THEN c1 ELSE c2) = (#IF b\<noteq>0 THEN NORM c1 ELSE NORM c2)" 
+  |"NORM (c1 #;; c2) =  (append_tscom_tagged (NORM c1) (NORM c2))" 
+  |"NORM c = c" 
+
+declare normalize_branching.elims[elim]
+
+lemma normalize_branching_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+                              \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
+  apply (induction c arbitrary: c' s stack t s' stack' i rule: normalize_branching.induct)
+         apply auto apply fastforce
+   apply fastforce
+  by (meson append_correct iSeq)
+
+lemma normalize_branching_complete: "c' \<turnstile>Rec\<rightharpoonup>i (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+                                 \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
+  apply (induction c arbitrary: c' s stack t s' stack' i rule: normalize_branching.induct)
+         apply auto apply fastforce
+   apply fastforce 
+  by (smt (verit, ccfv_threshold) append_complete iSeq iSeq_tE)
+
+corollary normalize_branching_correct: "c' \<turnstile>Rec\<rightharpoonup>i (NORM c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i) 
+                                      \<equiv> c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i)" 
+  by (smt (verit, ccfv_SIG) normalize_branching_complete normalize_branching_sound)
+
+fun branches :: "tscom_tagged \<Rightarrow> bool" where
+"branches (c\<^sub>1#;;c\<^sub>2) = (branches c\<^sub>1 \<or> branches c\<^sub>2)" |
+"branches (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) = True" |
+"branches c = False" 
+
+fun normalized :: "tscom_tagged \<Rightarrow> bool"("\<turnstile>\<^bsub>NORM\<^esub> _ ") where
+"\<turnstile>\<^bsub>NORM\<^esub> (c\<^sub>1#;;c\<^sub>2) = (\<not>branches c\<^sub>1 \<and> \<turnstile>\<^bsub>NORM\<^esub> c\<^sub>2)" |
+"\<turnstile>\<^bsub>NORM\<^esub> (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) = (\<turnstile>\<^bsub>NORM\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>NORM\<^esub> c\<^sub>2)" |
+"\<turnstile>\<^bsub>NORM\<^esub> c = True" 
+
+lemma normalized_append: "\<turnstile>\<^bsub>NORM\<^esub> c\<^sub>1 \<Longrightarrow> \<turnstile>\<^bsub>NORM\<^esub> c\<^sub>2 \<Longrightarrow> \<turnstile>\<^bsub>NORM\<^esub> (append_tscom_tagged c\<^sub>1 c\<^sub>2 )"
+  by (induction c\<^sub>1 c\<^sub>2 rule: append_tscom_tagged.induct) auto
+
+lemma normalized_branching: "\<turnstile>\<^bsub>NORM\<^esub> (NORM c)"
+  by (induction c rule: normalize_branching.induct) (auto simp add: normalized_append)
+
+lemma branches_equiv: "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> (branches c \<longleftrightarrow> branches c')" 
+  by (induction c c' rule: isem_equiv.induct) auto
+
+lemma normalized_equiv: "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> (\<turnstile>\<^bsub>NORM\<^esub> c \<longleftrightarrow> \<turnstile>\<^bsub>NORM\<^esub> c')" 
+  by (induction c c' rule: isem_equiv.induct) (auto simp add: branches_equiv)
+
+end

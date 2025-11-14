@@ -192,7 +192,7 @@ lemma ts_stack_noninterference_empty:
 
 lemma tsnoninterference_override_on: 
 "\<lbrakk>c'\<turnstile>(c,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (r,stack'); set (vars c) \<subseteq> S; set (vars c') \<subseteq> S\<rbrakk> \<Longrightarrow> r = override_on s r S"
-  unfolding override_on_def try
+  unfolding override_on_def by (metis (no_types, opaque_lifting) fun_upd_idem_iff ts_deterministic tsnoninterference')
 
 lemma tPop_tE': 
   assumes "c \<turnstile>(POP x,s,stack) \<Rightarrow>\<^bsup>Suc 0 \<^esup> (s', stack')"
@@ -353,20 +353,20 @@ inductive_cases tsPop_tE[elim]: "c \<turnstile>#REC (POP v,s) \<Rightarrow>\<^bs
 lemma tsrecs_deterministic: 
   "d \<turnstile>#REC (c,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (t,stack',n) \<Longrightarrow> d \<turnstile>#REC (c,s,stack) \<Rightarrow>\<^bsup>z'\<^esup> (t',stack'',n') \<Longrightarrow> z = z' \<and> t = t' \<and> stack'' = stack' \<and> n = n'" 
 proof (induction d c s stack z t stack' n arbitrary: z' t' stack'' n' rule: tsbig_step_t_recs_induct)
-  case (tIfTrue s b c c1 stack x t stack' y c2)
+  case (tsrIfTrue s b c c1 stack x t stack' y c2)
   then show ?case 
     by fastforce
 next
-  case (tIfFalse s b c c2 stack x t stack' n y c1)
+  case (tsrIfFalse s b c c2 stack x t stack' n y c1)
   from \<open>s b = 0\<close> \<open>c \<turnstile>#REC (IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>z'\<^esup>  (t', stack'',n')\<close> obtain x' where
      \<open>c \<turnstile>#REC (c2, s, stack) \<Rightarrow>\<^bsup>x'\<^esup>  (t', stack'',n')\<close> and \<open>z' = x' + 1\<close>
     by auto
   hence \<open> x = x' \<and> t = t' \<and> stack'' = stack' \<and> n = n'\<close>
-    using tIfFalse.IH by blast
+    using tsrIfFalse.IH by blast
   then show ?case 
-    by (simp add: \<open>z' = x' + 1\<close> tIfFalse.hyps(3))
+    by (simp add: \<open>z' = x' + 1\<close> tsrIfFalse.hyps(3))
 next
-  case (tCall C s z t c r stack)
+  case (tsrCall C s z t c r stack)
   then show ?case 
     using bigstep_det by blast
 qed (blast | fastforce)+

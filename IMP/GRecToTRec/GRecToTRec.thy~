@@ -2,7 +2,55 @@ theory GRecToTRec
   imports Com_Tagged
 begin
 
-unbundle tscom_tagged_syntax and no com'_syntax and no tscom_syntax
+unbundle tscom_tagged_syntax and no com'_syntax 
+
+
+fun append_tscom :: "tscom \<Rightarrow> tscom \<Rightarrow> tscom"  where 
+   "append_tscom (IF b\<noteq>0 THEN c1 ELSE c2) c = (IF b\<noteq>0 THEN append_tscom c1 c ELSE append_tscom c2 c)" 
+  |"append_tscom (c1 ;; c2) c = (c1 ;; append_tscom c2 c)" 
+  |"append_tscom c' c = c' ;; c" 
+
+lemma append_sound: "c' \<turnstile> (c1;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (append_tscom c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom.induct)
+  apply auto 
+  by fastforce+
+
+lemma append_complete: "c' \<turnstile> (append_tscom c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (c1;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom.induct)
+  apply auto 
+  by fastforce+
+
+corollary append_correct: "c' \<turnstile> (append_tscom c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<equiv> c' \<turnstile> (c1;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  by (smt (verit) append_complete append_sound)
+
+fun normalize_branching :: "tscom \<Rightarrow> tscom" ("NORM _ ") where 
+   "NORM (IF b\<noteq>0 THEN c1 ELSE c2) = (IF b\<noteq>0 THEN NORM c1 ELSE NORM c2)" 
+  |"NORM (c1 ;; c2) =  (append_tscom (NORM c1) (NORM c2))" 
+  |"NORM c = c" 
+
+lemma normalize_branching_sound: "c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c arbitrary: c' s stack t s' stack' rule: normalize_branching.induct)
+         apply auto apply fastforce
+   apply fastforce
+  by (meson append_correct tSeq)
+
+lemma normalize_branching_complete: "c' \<turnstile> (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c arbitrary: c' s stack t s' stack' rule: normalize_branching.induct)
+         apply auto apply fastforce
+   apply fastforce 
+  by (smt (verit, ccfv_threshold) append_complete tSeq tSeq_tE)
+
+corollary normalize_branching_correct: "c' \<turnstile> (NORM c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack') \<equiv> c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack')" 
+  by (smt (verit, ccfv_SIG) normalize_branching_complete normalize_branching_sound)
+
+abbreviation "merge_branch \<equiv> (IF ''b''\<noteq>0 THEN (''r'' ::= A (N 0)) ELSE (''r'' ::= A (N 1))) ;; (IF ''b''\<noteq>0 THEN (''r'' ::= A (N 0)) ELSE (''r'' ::= A (N 1))) ;;  (''r'' ::= A (N 2))"
+
+value "normalize_branching merge_branch"
+
+lemma normalize_branching_split: "NORM c = c1;;c2 \<Longrightarrow> \<forall> b c3 c4. c1 \<noteq> (IF b\<noteq>0 THEN c3 ELSE c4)"
+  apply (induction c arbitrary: c1 c2 rule: normalize_branching.induct)
+         apply auto
+  sorry
 
 fun term_point_count :: "tscom_tagged \<Rightarrow> nat" ("_ #Term")where
    "(#IF b\<noteq>0 THEN c1 ELSE c2) #Term = c1 #Term + c2 #Term" 
@@ -35,10 +83,16 @@ fun upto_rec_and_rest_syn :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> bool 
          (c1 #;; ut2, r2)))" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> SKIP\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> SKIP,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> x ::= a\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> x ::= a,[])" 
-  |"UPTO\<lbrakk>#i\<rightharpoonup> CALL c RETURN r \<rbrakk> n \<Zsurj> B= (#(if B then Some n else None)\<rightharpoonup> CALL c RETURN r ,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> CALL c RETURN r \<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> CALL c RETURN r ,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> TAIL\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> TAIL,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> PUSH v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> PUSH v,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> POP v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> POP v,[])" 
+
+term "(#IF b\<noteq>0 THEN TAIL ELSE c2) ;; c3"
+
+declare upto_rec_and_rest_syn.elims[elim]
+
+lemmas upto_rec_and_rest_syn.elims
 
 lemma rest_size : "UPTO\<lbrakk>c\<rbrakk> n \<Zsurj> b = (sb,rest) \<Longrightarrow> rc \<in> set rest \<Longrightarrow> size rc < size c"
 proof (induction c n b arbitrary: sb rest  rc rule: upto_rec_and_rest_syn.induct)
@@ -212,8 +266,11 @@ fun add_stack_coms :: "tscom_tagged \<Rightarrow> vname \<Rightarrow> tscom_tagg
 (*4. Initialize the program counter stack with the program exit value.
      Initialize program counter with program start value. *)
 
-definition "call_start (c:: tscom) pc max_pc_value ret \<equiv> (IF pc = 0 THEN (
-                                        (pc ::= A (N (max_pc_value + 1))) ;;
+
+unbundle tscom_syntax and no com'_syntax and no rcom_syntax
+
+definition "call_start c pc \<equiv> (IF pc = 0 THEN (
+                                        (pc ::= A (N (max_pc_value c + 1))) ;;
                                         PUSH pc ;;
                                         (pc ::= A (N 1)) 
                                   )ELSE tsSKIP)"
@@ -224,21 +281,19 @@ definition "reset_pc pc \<equiv> pc ::= A (N 0)"
 (* Give more structure and prove some modules that make sense*)
 (* Include unique variables in the original program *)
 
-definition "grec_to_trec c pc ret \<equiv> (
-  let annot_rcom = (\<lambda>x. ident_tail_calls (enum_rec_calls (tag_rcom x))) in 
-   let return_point_branches = (\<lambda>x. upto_rec_and_rest_syn_bfs x) in
-    let branches_to_tscom = (\<lambda>x. (map untag_tscom (map (\<lambda>x. add_stack_coms x (vars_to_stack c ret) pc) (map rcom_tagged_to_ts_com_tagged (map add_pop_skips x))))) in
-  (call_start c pc (max_pc_value c) ret) ;;
-  (switch_basic pc (branches_to_tscom (return_point_branches (annot_rcom c))) ;;
+definition "grec_to_trec c pc \<equiv> (
+   let return_point_branches = (\<lambda>x. upto_rec_and_rest_syn_bfs #\<lbrakk> x \<rbrakk>) in
+    let branches_to_tscom = (\<lambda>x. (map untag_tscom (map (\<lambda>x. add_stack_coms x pc) x))) in
+  (call_start #\<lbrakk> c \<rbrakk> pc ) ;;
+  (switch_basic pc (branches_to_tscom (return_point_branches (c))) ;;
    reset_pc pc))"
-
 
 theorem grec_to_trec_correct_gen:
 (* Generalize pc.*)
   assumes "pc \<notin> set (vars c)"
-  shows "c \<turnstile> (c,s,ret) \<Rightarrow>\<^bsup> t \<^esup> s' \<Longrightarrow> 
-       \<exists>t .grec_to_trec c pc ret \<turnstile> (grec_to_trec c pc ret,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack)"
-proof(induction c arbitrary: s ret t s')
+  shows "c \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack') \<Longrightarrow> 
+       \<exists>t . ((grec_to_trec c pc) \<turnstile> (grec_to_trec c pc,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack))"
+proof(induction c arbitrary: s stack t s' stack')
   case rSKIP
   then show ?case sorry
 next

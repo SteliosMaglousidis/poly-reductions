@@ -1,0 +1,223 @@
+theory Stack_Memory
+  imports IMP_Tailcall_Stacked TsComsExtended
+begin
+
+unbundle tscom_syntax
+
+section \<open>Stack manipulation on the HOL level\<close>
+
+subsection \<open>Pushing\<close>
+
+fun push_stack :: "state \<Rightarrow> vname \<Rightarrow>  fstack \<Rightarrow> fstack" where
+"push_stack s v stack =  stack(v := (s v) # (stack v))"
+
+fun push_many_stack :: "fstack \<Rightarrow> state \<Rightarrow> vname list \<Rightarrow> fstack" where
+"push_many_stack stack s [] = stack" |
+"push_many_stack stack s (v#vs) = push_many_stack (stack(v := s v # stack v)) s vs"
+
+lemma push_many_stack_fold: "push_many_stack stack s vs = fold (push_stack s) vs stack"
+  apply (induction stack s vs rule: push_many_stack.induct)
+  apply simp
+  by (metis fold_simps(2) push_many_stack.simps(2) push_stack.elims)
+
+lemma no_push_many_state: "v \<notin> set vs \<Longrightarrow> (push_many_stack stack s vs) v = stack v"  
+  by (induction stack s vs arbitrary: v rule: push_many_stack.induct) auto
+
+lemma push_many_stack1_replicate: "(push_many_stack stack s vs) v = (replicate (count_list vs v) (s v)) @ (stack v)"
+  by (induction vs arbitrary: v  stack) (auto simp add: replicate_append_same)
+
+lemma push_many_stack1_replicate': "(push_many_stack stack s vs) v = (if v \<in> set vs then (replicate (count_list vs v) (s v)) @ (stack v) else stack v)"
+  by (induction vs arbitrary: v  stack) (auto simp add: replicate_append_same)
+
+lemma push_many_stack_override_on: "push_many_stack stack s vs = override_on stack (\<lambda>v. (fun_upd stack v ((replicate (count_list vs v) (s v)) @ (stack v))) v) (set vs)"
+  using push_many_stack1_replicate' by fastforce
+
+lemma push_many_memory_of_state: "v \<in> set vs \<Longrightarrow> hd ((push_many_stack stack s vs) v) = s v"
+proof (induction stack s vs arbitrary: v rule: push_many_stack.induct)
+  case (2 stack s va vs)
+  then show ?case proof(cases "v \<in> set vs")
+    case True
+    then show ?thesis 
+      by (simp add: "2.IH")
+  next
+    case False
+    then show ?thesis 
+      using "2.prems" no_push_many_state by force
+  qed
+qed auto
+
+lemma push_many_stack_length: \<open>\<forall>v \<in> set vs. length ((push_many_stack stack s vs) v) \<ge> count_list vs v\<close>
+    using push_many_stack1_replicate by force
+
+subsection \<open>Popping\<close>
+
+fun pop_stack :: " vname \<Rightarrow> fstack \<Rightarrow> fstack" where
+"pop_stack v stack =  stack(v := tl (stack v))"
+
+fun pop_many_stack :: "fstack \<Rightarrow> vname list \<Rightarrow> fstack" where
+"pop_many_stack stack [] = stack" |
+"pop_many_stack stack (v#vs) = 
+  (case stack v of [] \<Rightarrow> pop_many_stack stack vs 
+               | sv#svs \<Rightarrow> pop_many_stack (stack(v := svs)) vs)"
+
+lemma pop_many_stack_fold: "pop_many_stack stack vs = fold (pop_stack) vs stack"
+proof (induction stack vs rule: pop_many_stack.induct)
+  case (2 stack v vs)
+  then show ?case proof (cases "stack v")
+    case Nil
+    then show ?thesis 
+      by (metis (mono_tags, lifting) "2.IH"(1) fold_simps(2) fun_upd_triv list.sel(2) list.simps(4) pop_many_stack.simps(2)
+          pop_stack.simps)
+  next
+    case (Cons sv svs)
+    have \<open>pop_many_stack (stack(v := svs)) vs = fold pop_stack vs (stack(v := svs))\<close>
+      using "2.IH"(2) local.Cons by presburger
+    then show ?thesis 
+      by (metis fold_simps(2) list.sel(3) list.simps(5) local.Cons pop_many_stack.simps(2) pop_stack.simps)
+  qed
+qed auto   
+
+lemma pop_many_stack1_drop: "(pop_many_stack stack vs) v = drop (count_list vs v) (stack v)"
+  by (induction vs arbitrary: v  stack) (auto simp add: drop_Suc list.case_eq_if)
+
+lemma pop_many_stack1_drop': "(pop_many_stack stack vs) v = (if v \<in> set vs then drop (count_list vs v) (stack v) else stack v)"
+  by (simp add: pop_many_stack1_drop)
+
+lemma pop_many_stack_override_on: "pop_many_stack stack vs = override_on stack (\<lambda>v. (fun_upd stack v (drop (count_list vs v) (stack v))) v) (set vs)"
+  using pop_many_stack1_drop' by fastforce
+
+
+fun pop_state :: "state \<Rightarrow> fstack \<Rightarrow> vname \<Rightarrow> state" where
+"pop_state s stack v = (case stack v of [] \<Rightarrow> s
+               | sv#svs \<Rightarrow> s(v := sv))" 
+
+
+fun pop_many_state :: "state \<Rightarrow> fstack \<Rightarrow> vname list \<Rightarrow> state" where
+"pop_many_state s stack [] = s" |
+"pop_many_state s stack (v#vs) = 
+  (case stack v of [] \<Rightarrow> pop_many_state s stack vs 
+               | sv#svs \<Rightarrow> pop_many_state (s(v := sv)) (stack(v := svs)) vs)"
+
+lemma no_pop_many_state1: " v \<notin> set vs  \<Longrightarrow> (pop_many_state s stack vs) v = s v"
+  by (induction s stack vs arbitrary: v rule: pop_many_state.induct) (auto simp add: list.case_eq_if)
+
+lemma no_pop_many_state: "(pop_many_state s stack vs) = s on (- (set vs))"
+  using no_pop_many_state1 by auto
+
+lemma pop_many_state1: "length (stack v) \<ge> count_list vs v \<Longrightarrow> v \<in> set vs 
+                    \<Longrightarrow> (pop_many_state s stack vs) v = stack v ! ((count_list vs v) - 1)"
+proof (induction s stack vs arbitrary: v rule: pop_many_state.induct)
+  case (1 s stack)
+  then show ?case by auto
+next
+  case (2 s stacka va vs)
+  then show ?case proof(cases "stacka va")
+    case Nil
+    then show ?thesis apply auto
+      using "2.prems"(1) apply auto[1]
+      by (metis "2.IH"(1) "2.prems"(1,2) One_nat_def count_list.simps(2) set_ConsD)
+  next
+    case (Cons sva svas)
+    have \<open> count_list vs v \<le> length ((stacka(va := svas)) v)\<close> apply auto 
+       apply (metis "2.prems"(1) Suc_eq_plus1 Suc_le_mono count_list.simps(2) length_Cons local.Cons)
+      using "2.prems"(1) by auto
+    then show ?thesis proof (cases "v \<in> set vs")
+      case True
+      have \<open>pop_many_state (s(va := sva)) (stacka(va := svas)) vs v =
+    (stacka(va := svas)) v ! (count_list vs v - 1)\<close> 
+        using "2.IH"(2) True \<open>count_list vs v \<le> length ((stacka(va := svas)) v)\<close> local.Cons by blast
+      then show ?thesis 
+        using True count_list_0_iff list.case_eq_if local.Cons by fastforce
+    next
+      case False
+      then show ?thesis proof (cases "v = va")
+        case True
+        have \<open>count_list vs va = 0\<close> 
+          using False True by auto
+        then show ?thesis 
+          using \<open>stacka va = sva # svas\<close> True apply auto using no_pop_many_state1 
+          using False by auto
+      next
+        case False
+        then show ?thesis using \<open>v \<notin> set vs\<close> \<open>v \<in> set (va # vs)\<close> by simp
+      qed
+    qed     
+  qed
+qed
+
+lemma drop_replicate: "drop n ((replicate n x) @ xs) = xs"
+  by (induction xs) auto
+
+lemma pop_many_pushed_stack: "pop_many_stack (push_many_stack stack s vs) vs = stack"
+proof-
+  have \<open>push_many_stack stack s vs = override_on stack (\<lambda>v. (fun_upd stack v ((replicate (count_list vs v) (s v)) @ (stack v))) v) (set vs)\<close>
+    using push_many_stack_override_on by blast
+  hence \<open>override_on (push_many_stack stack s vs) (\<lambda>v. (fun_upd (push_many_stack stack s vs) v (drop (count_list vs v) ((push_many_stack stack s vs) v))) v) (set vs)
+         = stack\<close> using drop_replicate 
+    by (metis (no_types, lifting) ext
+        fun_upd_same[of "push_many_stack stack s vs" _ "drop (count_list vs _) (push_many_stack stack s vs _)"]
+        override_on_apply_in[of _ "set vs"
+          "override_on stack (\<lambda>uuc. (stack(uuc := replicate (count_list vs uuc) (s uuc) @ stack uuc)) uuc)
+        (set vs)"
+          stack]
+        override_on_apply_notin[of _ "set vs"
+          "override_on stack (\<lambda>uuc. (stack(uuc := replicate (count_list vs uuc) (s uuc) @ stack uuc)) uuc)
+        (set vs)"
+          stack]
+        override_on_apply_notin[of _ "set vs" stack
+          "\<lambda>uuc. (stack(uuc := replicate (count_list vs uuc) (s uuc) @ stack uuc)) uuc"]
+        push_many_stack1_replicate[of stack s vs])
+  then show ?thesis using pop_many_stack_override_on by simp
+qed 
+
+section \<open>Proving stack semantic properties\<close>
+
+lemma push_many_sem: "(c \<turnstile> (PUSHMANY vs,s,stack)  \<Rightarrow>\<^bsup> Suc (length vs) \<^esup> (s,push_many_stack stack s vs))"
+proof(induction stack s vs rule: push_many_stack.induct)
+  case (1 s stack)
+  then show ?case by auto
+next
+  case (2 s stack v vs)
+  then show ?case 
+    apply auto 
+    by (metis (no_types, lifting) "2" One_nat_def plus_1_eq_Suc tSeq tsPush)
+qed
+
+lemma pop_many_sem: "\<forall>v \<in> set vs . count_list vs v \<le> length (stack v) \<Longrightarrow> 
+  (c \<turnstile> (POPMANY vs,s,stack)  \<Rightarrow>\<^bsup> Suc (length vs) \<^esup> (pop_many_state s stack vs,pop_many_stack stack vs))"
+proof(induction s stack vs rule: pop_many_state.induct)
+  case (1 s stack)
+  then show ?case by auto
+next
+  case (2 s stack v vs)
+  then show ?case apply (cases "stack v")
+     apply auto
+    by (smt (verit, del_insts) "2.IH"(2) add_0 add_Suc fun_upd_apply tSeq tsPop)
+qed
+
+lemma pop_many_stack_length: "c \<turnstile> (POPMANY vs,s,stack)  \<Rightarrow>\<^bsup> t \<^esup> (stack',s') \<Longrightarrow> v \<in> set vs \<Longrightarrow> length (stack v) \<ge> count_list vs v"
+  apply (induction vs arbitrary: s stack t stack' s' v rule: pop_many.induct) apply auto
+    apply (metis (lifting) Suc_le_length_iff count_list_0_iff fun_upd_same prod.inject tPop_tE zero_le)
+  by fastforce+
+
+lemma pop_many_sem': "c \<turnstile> (POPMANY vs,s,stack)  \<Rightarrow>\<^bsup> t \<^esup> (stack',s') \<Longrightarrow> (c \<turnstile> (POPMANY vs,s,stack)  \<Rightarrow>\<^bsup> Suc (length vs) \<^esup> (pop_many_state s stack vs,pop_many_stack stack vs))" 
+  by (simp add: pop_many_sem pop_many_stack_length)
+
+lemma pop_many_state_override_on: "\<forall>v \<in> set vs. length (stack v) \<ge> count_list vs v 
+                    \<Longrightarrow> (pop_many_state s stack vs) = override_on s (\<lambda>v. stack v ! ((count_list vs v) - 1)) (set vs)"
+  unfolding override_on_def using no_pop_many_state1 pop_many_state1 by auto
+
+lemma pushed_stack_state: "\<forall>v \<in> set vs. ((push_many_stack stack s vs) v) ! ((count_list vs v) - 1) = s v"
+  by (metis One_nat_def Suc_diff_Suc bot_nat_0.not_eq_extremum count_list_0_iff diff_zero length_replicate less_eq_Suc_le
+      nth_append_left nth_replicate order.refl push_many_stack1_replicate)
+
+lemma pop_pushed_many_state: \<open>pop_many_state s' (push_many_stack stack s xs) xs = override_on s' s (set xs)\<close>
+  unfolding override_on_def
+  using pop_many_state_override_on[OF push_many_stack_length , of s' stack s xs] pushed_stack_state[of xs stack s]
+  by auto
+
+theorem stack_memory_many: "c'\<turnstile>(POPMANY vs,s',push_many_stack stack s vs) \<Rightarrow>\<^bsup> Suc (length vs) \<^esup> (override_on s' s (set vs),stack)"
+  by (metis pop_many_pushed_stack pop_many_sem pop_pushed_many_state push_many_stack_length)
+
+
+end

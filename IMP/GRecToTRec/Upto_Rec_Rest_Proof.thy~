@@ -1,8 +1,8 @@
 theory Upto_Rec_Rest_Proof
-  imports GRecToTRec "General_Recursive_IMP/GRec_Upto" 
+  imports IMP_TCS_to_Tail_Recursive "General_Recursive_IMP/GRec_Upto" 
 begin
 
-unbundle tscom_tagged_syntax and no com'_syntax and no tscom_syntax
+unbundle tscom_tagged_syntax and no com'_syntax
 
 (*The return point of an annotated program part*)
 inductive
@@ -146,42 +146,41 @@ lemma rp_correct: "c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s
   by (smt (verit, del_insts) rp_complete rp_sound tscom_tag_correct)
 
 
-lemma upto_syn_correct_no_rest: "(UPTO\<lbrakk> c \<rbrakk> n \<Zsurj> B) = (ut,rest) \<Longrightarrow> B = False \<Longrightarrow>
-                        c' \<turnstile>Rec\<rightharpoonup>i (ut,s,stack) \<Rightarrow>\<^bsup>x\<^esup> (s',stack',None) \<Longrightarrow> no_rp c \<Longrightarrow>
-                       c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>x\<^esup> (s',stack',None)"
-proof (induction c n B arbitrary: c' ut s stack x s' stack' rest rule: upto_rec_and_rest_syn.induct)
-  case (1 b c1 c2 n B)
-  then show ?case apply auto try
+lemma upto_syn_correct_no_rest: "(*GRec\<lbrakk>\<diamondop>GRec\<lbrakk> #\<lbrakk>NORM c \<rbrakk>\<rbrakk>\<rbrakk> \<Zsurj> n) = (cn, rn) \<Longrightarrow>
+                                (UPTO-GREC\<lbrakk>cn\<rbrakk>) = (ut,rest) \<Longrightarrow> 
+                         #\<lbrakk>NORM c'\<rbrakk> \<turnstile>Rec\<rightharpoonup>i (ut,s,stack) \<Rightarrow>\<^bsup>x\<^esup> (s',stack',None) \<Longrightarrow>
+                       c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>x\<^esup> (s',stack')"
+proof (induction c arbitrary: c' ut s stack x s' stack' rest n cn rn)
+  case tsSKIP
+  then show ?case by auto
 next
-  case (2 c1 c2 n B)
+  case (tsPush x)
+  then show ?case by auto
+next
+  case (tsPop x)
+  then show ?case by auto
+next
+  case (tsAssign x1 x2a)
+  then show ?case by auto
+next
+  case (tsSeq c1 c2)
   then show ?case sorry
 next
-  case (3 i n B)
+  case (tsIf x1 c1 c2)
   then show ?case sorry
 next
-  case (4 i x a n B)
-  then show ?case sorry
+  case (tsCall x1 x2a)
+  then show ?case by auto
 next
-  case (5 i c r n B)
-  then show ?case sorry
-next
-  case (6 i n B)
-  then show ?case sorry
-next
-  case (7 i v n B)
-  then show ?case sorry
-next
-  case (8 i v n B)
+  case tsTAIL
   then show ?case sorry
 qed
-lemma upto_syn_correct_no_rest: "(UPTO\<lbrakk> c \<rbrakk> n \<Zsurj> False) = (ut,rest) 
-                      \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (ut \<diamondop>Ret n,s,ret)  \<Rightarrow>\<^bsup>x\<^esup> (s',None,b)
-                      \<Longrightarrow> #\<^sub>r\<lbrakk>c'\<rbrakk>\<inverse> \<turnstile>\<^sub>R (#\<^sub>r\<lbrakk>c\<rbrakk>\<inverse>,s,ret) \<Rightarrow>\<^bsup>x\<^esup> s'"
-  sorry
 
-lemma upto_syn_full_correct_rest: "c' \<turnstile>Rec\<rightharpoonup>i (c \<diamondop>Ret n,s,ret)  \<Rightarrow>\<^bsup>x\<^esup> (s',Some i,b)
-                      \<Longrightarrow> #\<^sub>r\<lbrakk>c'\<rbrakk>\<inverse> \<turnstile>\<^sub>R (#\<^sub>r\<lbrakk> (UPTO\<lbrace> c \<rbrace> \<diamondop>Ret* n) ! i \<rbrakk>\<inverse> ,s',ret) \<Rightarrow>\<^bsup>y\<^esup> s''
-                      \<Longrightarrow> #\<^sub>r\<lbrakk>c'\<rbrakk>\<inverse> \<turnstile>\<^sub>R (#\<^sub>r\<lbrakk>c\<rbrakk>\<inverse>,s,ret) \<Rightarrow>\<^bsup> x + y \<^esup> s''"
+
+lemma upto_syn_correct_rest: "(UPTO\<lbrakk> c \<rbrakk> n \<Zsurj> B) = (ut,rest) \<Longrightarrow> B = False \<Longrightarrow>
+                        c' \<turnstile>Rec\<rightharpoonup>i (ut,s,stack) \<Rightarrow>\<^bsup>x\<^esup> (s',stack',Some i) \<Longrightarrow> 
+                       c' \<turnstile>Rec\<rightharpoonup>i (rest ! i,s',stack') \<Rightarrow>\<^bsup>y\<^esup> (s'',stack'',j) \<Longrightarrow>
+                       c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>x + y\<^esup> (s'',stack'',None)"
   sorry
 
 lemma upto_syn_full_correct_no_rest: "c' \<turnstile>Rec\<rightharpoonup>i (c \<diamondop>Ret n,s,ret)  \<Rightarrow>\<^bsup>x\<^esup> (s',None,b)

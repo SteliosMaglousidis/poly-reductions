@@ -2,7 +2,73 @@ theory GRecToTRec
   imports Com_Tagged
 begin
 
-unbundle tscom_tagged_syntax and no com'_syntax and no tscom_syntax
+unbundle tscom_tagged_syntax and no com'_syntax 
+
+
+fun append_tscom :: "tscom \<Rightarrow> tscom \<Rightarrow> tscom"  where 
+   "append_tscom (IF b\<noteq>0 THEN c1 ELSE c2) c = (IF b\<noteq>0 THEN append_tscom c1 c ELSE append_tscom c2 c)" 
+  |"append_tscom (c1 ;; c2) c = (c1 ;; append_tscom c2 c)" 
+  |"append_tscom c' c = c' ;; c" 
+
+lemma append_sound: "c' \<turnstile> (c1;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (append_tscom c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom.induct)
+  apply auto 
+  by fastforce+
+
+lemma append_complete: "c' \<turnstile> (append_tscom c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (c1;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom.induct)
+  apply auto 
+  by fastforce+
+
+corollary append_correct: "c' \<turnstile> (append_tscom c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<equiv> c' \<turnstile> (c1;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  by (smt (verit) append_complete append_sound)
+
+fun normalize_branching :: "tscom \<Rightarrow> tscom" ("NORM _ ") where 
+   "NORM (IF b\<noteq>0 THEN c1 ELSE c2) = (IF b\<noteq>0 THEN NORM c1 ELSE NORM c2)" 
+  |"NORM (c1 ;; c2) =  (append_tscom (NORM c1) (NORM c2))" 
+  |"NORM c = c" 
+
+lemma normalize_branching_sound: "c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c arbitrary: c' s stack t s' stack' rule: normalize_branching.induct)
+         apply auto apply fastforce
+   apply fastforce
+  by (meson append_correct tSeq)
+
+lemma normalize_branching_complete: "c' \<turnstile> (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack') \<Longrightarrow> c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack')" 
+  apply (induction c arbitrary: c' s stack t s' stack' rule: normalize_branching.induct)
+         apply auto apply fastforce
+   apply fastforce 
+  by (smt (verit, ccfv_threshold) append_complete tSeq tSeq_tE)
+
+corollary normalize_branching_correct: "c' \<turnstile> (NORM c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack') \<equiv> c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack')" 
+  by (smt (verit, ccfv_SIG) normalize_branching_complete normalize_branching_sound)
+
+abbreviation "merge_branch \<equiv> (IF ''b''\<noteq>0 THEN (''r'' ::= A (N 0)) ELSE (''r'' ::= A (N 1))) ;; (IF ''b''\<noteq>0 THEN (''r'' ::= A (N 0)) ELSE (''r'' ::= A (N 1))) ;;  (''r'' ::= A (N 2))"
+
+value "normalize_branching merge_branch"
+
+lemma normalize_branching_split: "NORM c = c1;;c2 \<Longrightarrow> \<forall> b c3 c4. c1 \<noteq> (IF b\<noteq>0 THEN c3 ELSE c4)"
+  apply (induction c arbitrary: c1 c2 rule: normalize_branching.induct)
+         apply auto
+  sorry
+
+
+fun tail_count :: "tscom \<Rightarrow> nat" ("_ #Tail")where
+   "(IF b\<noteq>0 THEN c1 ELSE c2) #Tail = c1 #Tail + c2 #Tail" 
+  |"(c1 ;; c2) #Tail = c1 #Tail + c2 #Tail" 
+  |"TAIL #Tail = 1" 
+  |"_ #Tail = 0"
+
+fun count_tails :: "tscom \<Rightarrow> vname \<Rightarrow> nat \<Rightarrow> tscom"  ("PCTAILS _ _ _") where 
+   "PCTAILS (IF b\<noteq>0 THEN c1 ELSE c2) pc n = (IF b\<noteq>0 THEN PCTAILS c1 pc n ELSE PCTAILS c2 pc (c1 #Tail + n))" 
+  |"PCTAILS (c1 ;; c2) pc n =  (PCTAILS c1 pc n) ;; (PCTAILS c2 pc (c1 #Tail + n))" 
+  |"PCTAILS TAIL pc n  = ( pc ::= A (N n) ;;
+                          PUSH pc ;;
+                          pc ::= A (N 1) ;; 
+                          TAIL ;;
+                          POP pc)" 
+  |"PCTAILS c pc n = c"
+
 
 fun term_point_count :: "tscom_tagged \<Rightarrow> nat" ("_ #Term")where
    "(#IF b\<noteq>0 THEN c1 ELSE c2) #Term = c1 #Term + c2 #Term" 
@@ -35,10 +101,25 @@ fun upto_rec_and_rest_syn :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> bool 
          (c1 #;; ut2, r2)))" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> SKIP\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> SKIP,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> x ::= a\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> x ::= a,[])" 
-  |"UPTO\<lbrakk>#i\<rightharpoonup> CALL c RETURN r \<rbrakk> n \<Zsurj> B= (#(if B then Some n else None)\<rightharpoonup> CALL c RETURN r ,[])" 
+  |"UPTO\<lbrakk>#i\<rightharpoonup> CALL c RETURN r \<rbrakk> n \<Zsurj> B = (#(if B then Some n else None)\<rightharpoonup> CALL c RETURN r ,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> TAIL\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> TAIL,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> PUSH v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> PUSH v,[])" 
   |"UPTO\<lbrakk>#i\<rightharpoonup> POP v\<rbrakk> n \<Zsurj> B = (#(if B then Some n else None) \<rightharpoonup> POP v,[])" 
+
+
+fun upto_rec_and_rest_syn_norm :: "tscom \<Rightarrow> vname \<Rightarrow> nat \<Rightarrow> tscom * tscom list" ("UPTON\<lbrakk> _ \<rbrakk> _ _ " 55) where
+   "UPTON\<lbrakk>IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk> pc n =
+    (let (ut1,r1) = UPTON\<lbrakk>c1\<rbrakk> pc n in 
+      (let (ut2,r2) = UPTON\<lbrakk>c2\<rbrakk> pc (n + length r1) in 
+        (IF b\<noteq>0 THEN pc ::= A (N n) ;; ut1 ELSE pc ::= A (N (n + length r1)) ;; ut2,r1@r2)))"
+  |"UPTON\<lbrakk>c1 ;; c2\<rbrakk> pc n = 
+     (if stails c1 then 
+       (let (ut1,r1) = UPTON\<lbrakk>c1\<rbrakk> pc (Suc n) in (pc ::= A (N (Suc n)) ;; ut1, if r1 = [] then [c2] else map (\<lambda>x. x ;; c2) r1)) 
+      else 
+       (let (ut2,r2) = UPTON\<lbrakk>c2\<rbrakk> pc n  in
+         (c1 ;; ut2, r2)))" 
+  |"UPTON\<lbrakk>c\<rbrakk> pc n = (c,[])" 
+
 
 declare upto_rec_and_rest_syn.elims[elim]
 
@@ -150,34 +231,14 @@ fun enum_ret_points_list_n :: "tscom_tagged list \<Rightarrow> nat \<Rightarrow>
    "[] \<diamondop>Ret* n = []" 
   |"(c#cs) \<diamondop>Ret* n = (c \<diamondop>Ret n) # (cs \<diamondop>Ret* (n + c #Ret))" 
 
-lemma upto_rec_and_rest_synes_invar: "b \<in> set (upto_rec_and_rest_syn_bfs c) \<Longrightarrow>  tagged_invar b"
-proof (induction c arbitrary: b rule: upto_rec_and_rest_syn_bfs.induct)
-  case (1 c)
-  obtain csb rest where "upto_rec_and_rest_syn c = (csb,rest)"
-    by fastforce
-  have \<open>tagged_invar csb\<close> 
-    using \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> upto_rec_and_rest_syn_invar by simp 
-  then show ?case proof(cases rest)
-    case Nil
-    then show ?thesis 
-      by (metis (lifting) "1.prems" \<open>tagged_invar csb\<close> \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> list.distinct(1) list.set_cases list.simps(4) old.prod.case
-          set_ConsD upto_rec_and_rest_syn_bfs.elims)
-  next
-    case (Cons sb sbs)
-    have IH': \<open>\<forall>xb yb. (xb \<in> set (sb # sbs) \<longrightarrow> yb \<in> set (upto_rec_and_rest_syn_bfs xb) \<longrightarrow> tagged_invar yb)\<close>
-      using "1.IH" \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> local.Cons by presburger
-    have SBC2: \<open>upto_rec_and_rest_syn_bfs c =  csb #  concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs))\<close> 
-      by (metis (no_types, lifting) \<open>upto_rec_and_rest_syn c = (csb, rest)\<close> list.simps(5) local.Cons old.prod.case upto_rec_and_rest_syn_bfs.simps)
-    hence \<open>b \<in> set (csb #  concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs)))\<close> 
-      using "1.prems" by presburger
-    from IH' have IH'': "\<forall>y \<in> set (concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs))). tagged_invar y" sorry
-    from IH'' \<open>b \<in> set (csb #  concat (map (upto_rec_and_rest_syn_bfs) (sb#sbs)))\<close> \<open>tagged_invar csb\<close> show ?thesis 
-      by (metis set_ConsD)
-  qed
-qed
 
 (* 3. Assign the return point to the program counter after a termination point and 
   push the return point index to the program counter stack in case of a recursive call *)
+
+
+term "c1 ;; c2 ;; c3"
+
+term "c1 ;; (c2 ;; c3)"
 
 unbundle tscom_tagged_syntax and no com'_syntax and no rcom_tagged_syntax
 
@@ -209,18 +270,23 @@ fun add_stack_coms :: "tscom_tagged \<Rightarrow> vname \<Rightarrow> tscom_tagg
                             (#None \<rightharpoonup> pc ::= A (N i)) #;;
                             (#None \<rightharpoonup> TAIL)"
 (*Termination points*)
-|"add_stack_coms c pc =      c #;;
+|"add_stack_coms c pc =   c #;;
                             #None \<rightharpoonup>POP pc #;; 
                             (#None \<rightharpoonup> TAIL)"
 
 (*4. Initialize the program counter stack with the program exit value.
      Initialize program counter with program start value. *)
 
-definition "call_start (c:: tscom) pc max_pc_value ret \<equiv> (IF pc = 0 THEN (
-                                        (pc ::= A (N (max_pc_value + 1))) ;;
+
+unbundle tscom_syntax and no com'_syntax and no rcom_syntax
+
+definition "call_start c pc \<equiv> (IF pc = 0 THEN (
+                                        (pc ::= A (N (max_pc_value c + 1))) ;;
                                         PUSH pc ;;
                                         (pc ::= A (N 1)) 
                                   )ELSE tsSKIP)"
+
+
 
 (*5. Reset pc to 0 *)
 definition "reset_pc pc \<equiv> pc ::= A (N 0)"
@@ -228,61 +294,20 @@ definition "reset_pc pc \<equiv> pc ::= A (N 0)"
 (* Give more structure and prove some modules that make sense*)
 (* Include unique variables in the original program *)
 
-definition "grec_to_trec c pc ret \<equiv> (
-  let annot_rcom = (\<lambda>x. ident_tail_calls (enum_rec_calls (tag_rcom x))) in 
-   let return_point_branches = (\<lambda>x. upto_rec_and_rest_syn_bfs x) in
-    let branches_to_tscom = (\<lambda>x. (map untag_tscom (map (\<lambda>x. add_stack_coms x (vars_to_stack c ret) pc) (map rcom_tagged_to_ts_com_tagged (map add_pop_skips x))))) in
-  (call_start c pc (max_pc_value c) ret) ;;
-  (switch_basic pc (branches_to_tscom (return_point_branches (annot_rcom c))) ;;
+definition "grec_to_trec c pc \<equiv> (
+   let return_point_branches = (\<lambda>x. upto_rec_and_rest_syn_bfs #\<lbrakk> x \<rbrakk>) in
+    let branches_to_tscom = (\<lambda>x. (map untag_tscom (map (\<lambda>x. add_stack_coms x pc) x))) in
+  (call_start #\<lbrakk> c \<rbrakk> pc ) ;;
+  (switch_basic pc (branches_to_tscom (return_point_branches (c))) ;;
    reset_pc pc))"
 
-
-theorem grec_to_trec_correct_gen:
+theorem grec_to_tirec_correct_gen:
 (* Generalize pc.*)
   assumes "pc \<notin> set (vars c)"
-  shows "c \<turnstile> (c,s,ret) \<Rightarrow>\<^bsup> t \<^esup> s' \<Longrightarrow> 
-       \<exists>t .grec_to_trec c pc ret \<turnstile> (grec_to_trec c pc ret,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack)"
-proof(induction c arbitrary: s ret t s')
-  case rSKIP
-  then show ?case sorry
-next
-  case (rAssign x1 x2)
-  then show ?case sorry
-next
-  case (rSeq c1 c2)
-  then show ?case unfo  
-next
-  case (rIf x1 c1 c2)
-  then show ?case sorry
-next
-  case (rCall x1 x2)
-  then show ?case sorry
-next
-  case rRec
-  then show ?case sorry
-qed
-  case (rSkip c s ret)
-  then show ?case sorry
-next
-  case (rAssign c x a s ret)
-  then show ?case sorry
-next
-  case (rSeq c c1 s1 ret x s2 c2 y s3 z)
-  then show ?case sorry
-next
-  case (rIfTrue s b c c1 ret x t y c2)
-  then show ?case sorry
-next
-  case (rIfFalse s b c c2 ret x t y c1)
-  then show ?case sorry
-next
-  case (rCall C s z t c r ret)
-  then show ?case sorry
-next
-  case (rRec c s ret z t)
-  then show ?case sorry
-qed
-
+  shows "c \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack') \<Longrightarrow> 
+       \<exists>t . ((grec_to_trec c pc) \<turnstile> (grec_to_trec c pc,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack))"
+proof(induction c arbitrary: s stack t s' stack')
+  oops
 (* do each step seperately, prove its specification *)
 
 end

@@ -16,7 +16,7 @@ abbreviation "fibonacci \<equiv> IF ''n''= 0 ON ''b'' THEN (''r'' ::= A (N 0)) E
                             )))"
 
 
-abbreviation "ackermann \<equiv> (IF ''m''=0 ON ''b'' THEN (''r'' ::= Plus (V ''n'') (N 1)) ELSE 
+abbreviation "ackermann \<equiv> (IF ''m''=0 ON ''b'' THEN (''r'' ::= Plus (V ''n'') (N 1) ;; RECURSE) ELSE 
                      (IF ''n''=0 ON ''b'' THEN (
                                     ''m'' ::= Sub (V ''m'') (N 1) ;;
                                     ''n'' ::= Plus (V ''n'') (N 1) ;;

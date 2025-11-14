@@ -212,6 +212,9 @@ next
   qed
 qed
 
+
+abbreviation "switch_basic0 b vcs \<equiv> switch_basic_acc b vcs 0"
+
 abbreviation "switch_basic b vcs \<equiv> switch_basic_acc b vcs 1"
 
 lemma switch_basic_term : "s b > length sbs

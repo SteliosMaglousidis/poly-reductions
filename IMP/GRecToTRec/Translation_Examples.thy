@@ -2,59 +2,56 @@ theory Translation_Examples
   imports "GRecToTRec"
 begin
 
-unbundle rcom_syntax and no com'_syntax and no tscom_syntax
+unbundle tscom_syntax and no com'_syntax and no rcom_syntax
 
 abbreviation "fibonacci \<equiv> IF ''n''= 0 ON ''b'' THEN (''r'' ::= A (N 0)) ELSE (
                      (IF ''n''=1 ON ''b'' THEN (''r'' ::= A (N 1)) ELSE (
                           (''n'' ::= Sub (V ''n'') (N 1)) ;;
-                            RECURSE ;;
+                            TAIL ;;
                             (''r1'' ::= A (V ''r'')) ;;
                             (''n'' ::= Sub (V ''n'') (N 1)) ;;
-                            RECURSE ;;
+                            TAIL ;;
                             (''r2'' ::= A (V ''r'')) ;;
                             (''r'' ::= Plus (V ''r1'') (V ''r2''))
                             )))"
 
 
-abbreviation "ackermann \<equiv> (IF ''m''=0 ON ''b'' THEN (''r'' ::= Plus (V ''n'') (N 1) ;; RECURSE) ELSE 
+abbreviation "ackermann \<equiv> (IF ''m''=0 ON ''b'' THEN (''r'' ::= Plus (V ''n'') (N 1) ;; TAIL) ELSE 
                      (IF ''n''=0 ON ''b'' THEN (
                                     ''m'' ::= Sub (V ''m'') (N 1) ;;
                                     ''n'' ::= Plus (V ''n'') (N 1) ;;
-                                    RECURSE )
+                                    TAIL )
                                   ELSE(
                                     ''n'' ::= Sub (V ''n'') (N 1) ;;
-                                    RECURSE ;;
+                                    TAIL ;;
                                     ''r1'' ::= A (V ''r'') ;;
                                     ''m'' ::= Sub (V ''m'') (N 1) ;;
                                     ''n'' ::= A (V ''r1'') ;;
-                                    RECURSE)))"
+                                    TAIL)))"
 
 
 (*Translate to intermediate representation *)
 
-abbreviation "fibonacci_tagged \<equiv> tag_rcom fibonacci"
+abbreviation "fibonacci_normalized \<equiv> NORM fibonacci"
+
+abbreviation "fibonacci_tagged \<equiv> tag_tscom fibonacci_normalized"
 
 value  "(fibonacci_tagged)" 
 
-abbreviation "fibonacci_upto1 \<equiv> UPTO\<lbrakk> fibonacci_tagged \<rbrakk> 0 \<Zsurj> False"
-value  "(fibonacci_upto1)" 
+abbreviation "fibonacci_reci \<equiv> \<diamondop>Rec\<lbrakk> fibonacci_tagged \<rbrakk> \<Zsurj> False"
+value  "(fibonacci_reci)" 
 
-abbreviation "ackermann_tagged \<equiv> tag_rcom ackermann"
+abbreviation "fibonacci_enum_rec \<equiv> *Rec\<lbrakk> fibonacci_reci \<rbrakk> \<Zsurj> 0"
+value  "(fibonacci_enum_rec)" 
+
+abbreviation "ackermann_tagged \<equiv> tag_tscom ackermann"
 
 value  "(ackermann_tagged)" 
 
 abbreviation "ackermann_upto1 \<equiv> UPTO\<lbrakk> ackermann_tagged \<rbrakk> 0 \<Zsurj> False"
 value  "(ackermann_upto1)" 
 
-abbreviation "fibonacci_enum \<equiv> enum_rec_calls fibonacci_tagged"
-
-value  "(fibonacci_enum)" 
-
-abbreviation "ackermann_enum \<equiv> enum_rec_calls ackermann_tagged"
-
-value  "(ackermann_enum)" 
-
-abbreviation  "fibonacci_branches \<equiv> switch_branches_bfs fibonacci_enum" 
+abbreviation  "fibonacci_branches \<equiv> upto_rec_and_rest_syn_bfs fibonacci_tagged" 
 
 value  "(fibonacci_branches)" 
 
