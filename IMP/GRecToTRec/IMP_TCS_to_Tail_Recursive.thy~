@@ -4,6 +4,7 @@ begin
 
 unbundle tscom_tagged_syntax and no com'_syntax 
 
+
 fun upto_rec_and_rest_syn :: "tscom_tagged \<Rightarrow> tscom_tagged * tscom_tagged list" ("UPTO-GREC\<lbrakk> _ \<rbrakk> " 55) where
    "UPTO-GREC\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk> =
     (let (ut1,r1) = UPTO-GREC\<lbrakk>c1\<rbrakk> in 

@@ -35,6 +35,13 @@ next
   then show ?case sorry
 qed
 
+
+lemma upto_syn_correct_rest: "(UPTO\<lbrakk> c \<rbrakk> n \<Zsurj> B) = (ut,rest) \<Longrightarrow> B = False \<Longrightarrow>
+                        c' \<turnstile>Rec\<rightharpoonup>i (ut,s,stack) \<Rightarrow>\<^bsup>x\<^esup> (s',stack',Some i) \<Longrightarrow> 
+                       c' \<turnstile>Rec\<rightharpoonup>i (rest ! i,s',stack') \<Rightarrow>\<^bsup>y\<^esup> (s'',stack'',j) \<Longrightarrow>
+                       c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>x + y\<^esup> (s'',stack'',None)"
+  sorry
+
 lemma upto_syn_full_correct_no_rest: "c' \<turnstile>Rec\<rightharpoonup>i (c \<diamondop>Ret n,s,ret)  \<Rightarrow>\<^bsup>x\<^esup> (s',None,b)
                       \<Longrightarrow> #\<^sub>r\<lbrakk>c'\<rbrakk>\<inverse> \<turnstile>\<^sub>R (#\<^sub>r\<lbrakk>c\<rbrakk>\<inverse>,s,ret) \<Rightarrow>\<^bsup> x + y \<^esup> s''"
   sorry

@@ -1,5 +1,5 @@
-theory IMP_GREC_to_IMP_TCS
-  imports "General_Recursive_IMP/IMP_GRec" "Tail_Recursive_IMP_Stack/Stack_Memory"
+theory Stack_Rcom
+  imports GRecToTRec "Tail_Recursive_IMP_Stack/Stack_Memory"
 begin
 
 unbundle rcom_syntax'

@@ -2,475 +2,236 @@ theory IMP_TCS_to_IMP_TCSI
   imports IMP_TCS_Intermediate IMP_TCSI_Normalization
 begin
 
+fun rec_count :: "tscom_tagged \<Rightarrow> nat" ("_ #REC") where
+   "(#IF b\<noteq>0 THEN c1 ELSE c2) #REC = c1 #REC + c2 #REC" 
+  |"(c1 #;; c2) #REC = c1 #REC + c2 #REC" 
+  |"#i\<rightharpoonup> TAIL #REC = 1" 
+  |"_ #REC = 0"
 
-section \<open>Annotation of non-tail-recursive calls\<close>
+fun trec_count :: "tscom_tagged \<Rightarrow> nat" ("_ #TREC")where
+   "(#IF b\<noteq>0 THEN c1 ELSE c2)  #TREC = c1 #TREC + c2 #TREC" 
+  |"(c1 #;; c2) #TREC = c2 #TREC" 
+  |"#i\<rightharpoonup> TAIL #TREC = 1" 
+  |"_ #TREC = 0" 
 
-fun annot_rec_calls :: "tscom_tagged \<Rightarrow>  tscom_tagged" ("$Rec\<lbrakk> _ \<rbrakk> " 55) where
-   "$Rec\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk> =
-     (#IF b\<noteq>0 THEN ($Rec\<lbrakk>c1\<rbrakk>) ELSE ($Rec\<lbrakk>c2\<rbrakk>))"
-  |"$Rec\<lbrakk>c1 #;; c2\<rbrakk> = 
-     (($Rec\<lbrakk>c1\<rbrakk>) #;; ($Rec\<lbrakk>c2\<rbrakk>))" 
-  |"$Rec\<lbrakk>#i\<rightharpoonup> TAIL\<rbrakk> = #Some 0 \<rightharpoonup> TAIL" 
-  |"$Rec\<lbrakk>c\<rbrakk> = c" 
+definition grec_count :: "tscom_tagged \<Rightarrow> nat" ("_ #GREC") where
+ "c #GREC = c #REC - c #TREC"
 
-declare annot_rec_calls.elims[elim]
+section \<open>Identification of non-tail-recursive calls\<close>
 
-fun annot_grec_calls :: "tscom_tagged \<Rightarrow> tscom_tagged" ("\<diamondop>$GRec\<lbrakk> _ \<rbrakk> " 55) where
-   "\<diamondop>$GRec\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk>  =
-     (#IF b\<noteq>0 THEN (\<diamondop>$GRec\<lbrakk>c1\<rbrakk>) ELSE (\<diamondop>$GRec\<lbrakk>c2\<rbrakk>))"
-  |"\<diamondop>$GRec\<lbrakk>c1 #;; c2\<rbrakk> = 
-     (($Rec\<lbrakk>c1\<rbrakk>) #;; (\<diamondop>$GRec\<lbrakk>c2\<rbrakk>))" 
-  |"\<diamondop>$GRec\<lbrakk>c\<rbrakk> = c" 
+fun ident_rec_calls :: "tscom_tagged \<Rightarrow>  tscom_tagged" ("\<diamondop>Rec\<lbrakk> _ \<rbrakk> " 55) where
+   "\<diamondop>Rec\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk> =
+     (#IF b\<noteq>0 THEN (\<diamondop>Rec\<lbrakk>c1\<rbrakk>) ELSE (\<diamondop>Rec\<lbrakk>c2\<rbrakk>))"
+  |"\<diamondop>Rec\<lbrakk>c1 #;; c2\<rbrakk> = 
+     ((\<diamondop>Rec\<lbrakk>c1\<rbrakk>) #;; (\<diamondop>Rec\<lbrakk>c2\<rbrakk>))" 
+  |"\<diamondop>Rec\<lbrakk>#i\<rightharpoonup> TAIL\<rbrakk> = #Some 0 \<rightharpoonup> TAIL" 
+  |"\<diamondop>Rec\<lbrakk>c\<rbrakk> = c" 
 
-declare annot_grec_calls.elims[elim]
+declare ident_rec_calls.elims[elim]
+
+fun ident_grec_calls :: "tscom_tagged \<Rightarrow> tscom_tagged" ("\<diamondop>GRec\<lbrakk> _ \<rbrakk> " 55) where
+   "\<diamondop>GRec\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk>  =
+     (#IF b\<noteq>0 THEN (\<diamondop>GRec\<lbrakk>c1\<rbrakk>) ELSE (\<diamondop>GRec\<lbrakk>c2\<rbrakk>))"
+  |"\<diamondop>GRec\<lbrakk>c1 #;; c2\<rbrakk> = 
+     ((\<diamondop>Rec\<lbrakk>c1\<rbrakk>) #;; (\<diamondop>GRec\<lbrakk>c2\<rbrakk>))" 
+  |"\<diamondop>GRec\<lbrakk>c\<rbrakk> = c" 
+
+declare ident_grec_calls.elims[elim]
 
 text \<open>Proof that semantics are preserved\<close>
 
-lemma arec_seq_equiv: "c \<cong>\<^sub>\<turnstile>\<^sub>i $Rec\<lbrakk> c \<rbrakk>"
+lemma irec_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+               \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>Rec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)" 
+  by (induction c arbitrary: c' s stack t s' stack' i) fastforce+
+
+lemma irec_complete: "c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>Rec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+                  \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
+  by (induction c arbitrary: c' s stack t s' stack' i) fastforce+
+
+corollary irec_correct:  "\<exists>i. c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>Rec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+                  \<equiv> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
+  by (smt (verit, best) irec_complete irec_sound)
+
+lemma irec_seq_equiv: "c \<equiv>\<^sub>\<turnstile>\<^sub>i \<diamondop>Rec\<lbrakk> c \<rbrakk>"
   by (induction c) auto
 
-lemma arec_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
-               \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i ($Rec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)" 
-  by (simp add: arec_seq_equiv asem_equiv_sound)
-
-lemma arec_complete: "c' \<turnstile>Rec\<rightharpoonup>i ($Rec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
-                  \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-  by (simp add: arec_seq_equiv asem_equiv_sound asem_equiv_sym)
-
-corollary arec_correct:  "\<exists>i. c' \<turnstile>Rec\<rightharpoonup>i ($Rec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
-                  \<equiv> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-  using arec_sound arec_complete by (smt (z3))
-
-lemma igrec_sem_equiv: "c \<cong>\<^sub>\<turnstile>\<^sub>i \<diamondop>$GRec\<lbrakk> c \<rbrakk>"
-  by (induction c) (auto simp add: arec_seq_equiv)
-
 lemma igrec_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
-               \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>$GRec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)" 
-  by (simp add: igrec_sem_equiv asem_equiv_sound)
+               \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>GRec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)" 
+  apply (induction c arbitrary: c' s stack t s' stack' i) 
+  using irec_sound by fastforce+
 
-lemma igrec_complete: "c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>$GRec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+lemma igrec_complete: "c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>GRec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
                   \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-  by (simp add: igrec_sem_equiv asem_equiv_sound asem_equiv_sym)
+  apply (induction c arbitrary: c' s stack t s' stack' i) 
+  using irec_complete apply auto
+  using irec_complete apply fastforce
+   apply (metis Suc_eq_plus1 order_less_le iIfTrue)
+  by (metis Suc_eq_plus1 iIfFalse)
 
-corollary igrec_correct:  "\<exists>i. c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>$GRec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+corollary igrec_correct:  "\<exists>i. c' \<turnstile>Rec\<rightharpoonup>i (\<diamondop>GRec\<lbrakk> c \<rbrakk>,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
                   \<equiv> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
   by (smt (verit, best) igrec_complete igrec_sound)
 
+lemma igrec_sem_equiv: "c \<equiv>\<^sub>\<turnstile>\<^sub>i \<diamondop>GRec\<lbrakk> c \<rbrakk>"
+  by (induction c) (auto simp add: irec_seq_equiv)
+
 text \<open>Specification proof\<close>
 
-fun rec_annotated :: "tscom_tagged \<Rightarrow> bool" ("\<turnstile>\<^bsub>$Rec\<^esub> _  " 55) where
-"\<turnstile>\<^bsub>$Rec\<^esub> (c\<^sub>1#;;c\<^sub>2) = (\<turnstile>\<^bsub>$Rec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>$Rec\<^esub> c\<^sub>2)" |
-"\<turnstile>\<^bsub>$Rec\<^esub> (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) = (\<turnstile>\<^bsub>$Rec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>$Rec\<^esub> c\<^sub>2)" |
-"\<turnstile>\<^bsub>$Rec\<^esub> (#None\<rightharpoonup> TAIL) = False" |
-"\<turnstile>\<^bsub>$Rec\<^esub> c = True"
+fun rec_indentified :: "tscom_tagged \<Rightarrow> bool" ("\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> _  " 55) where
+"\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> (c\<^sub>1#;;c\<^sub>2) = (\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>\<diamondop>Rec\<^esub> c\<^sub>2)" |
+"\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) = (\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>\<diamondop>Rec\<^esub> c\<^sub>2)" |
+"\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> (#None\<rightharpoonup> TAIL) = False" |
+"\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> c = True"
 
-lemma recs_annotated: "\<turnstile>\<^bsub>$Rec\<^esub> ($Rec\<lbrakk> c \<rbrakk>)"
-  by (induction c rule: rec_annotated.induct) auto
+lemma recs_indentified: "\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> (\<diamondop>Rec\<lbrakk> c \<rbrakk>)"
+  by (induction c rule: rec_indentified.induct) auto
 
-lemma non_branching_no_rec: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i) \<Longrightarrow> i = None \<Longrightarrow>
-                                     \<not>branches c \<Longrightarrow> \<turnstile>\<^bsub>$Rec\<^esub> c \<Longrightarrow> \<not>stails_tagged c"
-  by (induction c' c s stack t s' stack' i rule: first_rec_index_induct) auto
+fun grec_indentified :: "tscom_tagged \<Rightarrow> bool" ("\<turnstile>\<^bsub>\<diamondop>GRec\<^esub> _  " 55) where
+"\<turnstile>\<^bsub>\<diamondop>GRec\<^esub> (c\<^sub>1#;;c\<^sub>2) = (\<turnstile>\<^bsub>\<diamondop>Rec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>\<diamondop>GRec\<^esub> c\<^sub>2)" |
+"\<turnstile>\<^bsub>\<diamondop>GRec\<^esub> (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) = (\<turnstile>\<^bsub>\<diamondop>GRec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>\<diamondop>GRec\<^esub> c\<^sub>2)" |
+"\<turnstile>\<^bsub>\<diamondop>GRec\<^esub> c = True" 
 
-lemma non_branching_no_rec': "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',None) \<Longrightarrow>
-                                     \<not>branches c \<Longrightarrow> \<turnstile>\<^bsub>$Rec\<^esub> c \<Longrightarrow> \<not>stails_tagged c"
-  by (simp add: non_branching_no_rec)
-
-lemma non_branching_rec: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i) \<Longrightarrow> i = Some j \<Longrightarrow>
-                                     \<not>branches c \<Longrightarrow> \<turnstile>\<^bsub>$Rec\<^esub> c \<Longrightarrow> stails_tagged c"
-  by (induction c' c s stack t s' stack' i rule: first_rec_index_induct) auto
-
-lemma non_branching_rec': "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',Some i) \<Longrightarrow>
-                                     \<not>branches c \<Longrightarrow> \<turnstile>\<^bsub>$Rec\<^esub> c \<Longrightarrow> stails_tagged c"
-  by (simp add: non_branching_rec)
-
-fun grec_annotated :: "tscom_tagged \<Rightarrow> bool" ("\<turnstile>\<^bsub>$GRec\<^esub> _  " 55) where
-"\<turnstile>\<^bsub>$GRec\<^esub> (c\<^sub>1#;;c\<^sub>2) = (\<turnstile>\<^bsub>$Rec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>$GRec\<^esub> c\<^sub>2)" |
-"\<turnstile>\<^bsub>$GRec\<^esub> (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) = (\<turnstile>\<^bsub>$GRec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>$GRec\<^esub> c\<^sub>2)" | 
-"\<turnstile>\<^bsub>$GRec\<^esub> c = True" 
-
-fun only_grec_annotated :: "tscom_tagged \<Rightarrow> bool" ("\<turnstile>\<^bsub>$GRec!\<^esub> _  " 55) where
-"\<turnstile>\<^bsub>$GRec!\<^esub> (c\<^sub>1#;;c\<^sub>2) = (\<turnstile>\<^bsub>$Rec\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>$GRec!\<^esub> c\<^sub>2)" |
-"\<turnstile>\<^bsub>$GRec!\<^esub> (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) = (\<turnstile>\<^bsub>$GRec!\<^esub> c\<^sub>1 \<and> \<turnstile>\<^bsub>$GRec!\<^esub> c\<^sub>2)" | 
-"\<turnstile>\<^bsub>$GRec!\<^esub> (#Some i\<rightharpoonup> TAIL) = False" |
-"\<turnstile>\<^bsub>$GRec!\<^esub> c = True" 
-
-lemma grecs_only_grecs_annotated: "\<turnstile>\<^bsub>$GRec!\<^esub> c \<Longrightarrow> \<turnstile>\<^bsub>$GRec\<^esub> c"
-  by (induction c) auto
-
-lemma grecs_annotated: "\<turnstile>\<^bsub>$GRec\<^esub> (\<diamondop>$GRec\<lbrakk> c \<rbrakk>)"
-  by (induction c  rule: grec_annotated.induct) (auto simp add: recs_annotated)
-
-lemma non_branching_trec: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i) \<Longrightarrow> i = None \<Longrightarrow>
-                                     \<not>branches c \<Longrightarrow> \<turnstile>\<^bsub>$GRec\<^esub> c \<Longrightarrow> sinvar_tagged c"
-  by (induction c' c s stack t s' stack' i rule: first_rec_index_induct) (auto simp add: non_branching_no_rec)
-
-lemma non_branching_trec': "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',None) \<Longrightarrow>
-                                     \<not>branches c \<Longrightarrow> \<turnstile>\<^bsub>$GRec\<^esub> c \<Longrightarrow> sinvar_tagged c"
-  by (simp add: non_branching_trec)
-
-lemma rec_grec_identified: "\<turnstile>\<^bsub>$Rec\<^esub> c \<Longrightarrow> \<turnstile>\<^bsub>$GRec\<^esub> c"
-  by (induction c) auto
+lemma grecs_indentified: "\<turnstile>\<^bsub>\<diamondop>GRec\<^esub> (\<diamondop>GRec\<lbrakk> c \<rbrakk>)"
+  by (induction c  rule: grec_indentified.induct) (auto simp add: recs_indentified)
 
 text \<open>Proof that normalization property is preserved\<close>
 
-lemma recs_normalized: "\<turnstile>\<^bsub>NORM\<^esub> c \<equiv> \<turnstile>\<^bsub>NORM\<^esub> ($Rec\<lbrakk> c \<rbrakk>)"
-  using arec_seq_equiv normalized_equiv by presburger
+lemma recs_normalized: "\<turnstile>\<^bsub>NORM\<^esub> c \<equiv> \<turnstile>\<^bsub>NORM\<^esub> (\<diamondop>Rec\<lbrakk> c \<rbrakk>)"
+  using irec_seq_equiv normalized_equiv by presburger
 
-lemma grecs_normalized: "\<turnstile>\<^bsub>NORM\<^esub> c \<equiv> \<turnstile>\<^bsub>NORM\<^esub> (\<diamondop>$GRec\<lbrakk> c \<rbrakk>)"
+lemma grecs_normalized: "\<turnstile>\<^bsub>NORM\<^esub> c \<equiv> \<turnstile>\<^bsub>NORM\<^esub> (\<diamondop>GRec\<lbrakk> c \<rbrakk>)"
   using igrec_sem_equiv normalized_equiv by presburger
 
-section \<open>Enumeration of identified recursive calls\<close>
+section \<open>Enumeration of non-tail-recursive calls\<close>
 
-fun enum_arec_calls :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> tscom_tagged * nat" ("*$Rec\<lbrakk> _ \<rbrakk> \<Zsurj> _" 55) where
-   "*$Rec\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk> \<Zsurj> n =
-      (let (c1',recs1) = (*$Rec\<lbrakk>c1\<rbrakk> \<Zsurj> n) in
-      (let (c2',recs2) = (*$Rec\<lbrakk>c2\<rbrakk> \<Zsurj> n + recs1) in
+fun enum_grec_calls :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> tscom_tagged * nat" ("*GRec\<lbrakk> _ \<rbrakk> \<Zsurj> _" 55) where
+   "*GRec\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk> \<Zsurj> n =
+      (let (c1',recs1) = (*GRec\<lbrakk>c1\<rbrakk> \<Zsurj> n) in
+      (let (c2',recs2) = (*GRec\<lbrakk>c2\<rbrakk> \<Zsurj> n + recs1) in
      ((#IF b\<noteq>0 THEN c1' ELSE c2', recs1 + recs2))))"
-  |"*$Rec\<lbrakk>c1 #;; c2\<rbrakk> \<Zsurj> n = 
-      (let (c1',recs1) = (*$Rec\<lbrakk>c1\<rbrakk> \<Zsurj> n) in
-      (let (c2',recs2) = (*$Rec\<lbrakk>c2\<rbrakk> \<Zsurj> n + recs1) in
+  |"*GRec\<lbrakk>c1 #;; c2\<rbrakk> \<Zsurj> n = 
+      (let (c1',recs1) = (*GRec\<lbrakk>c1\<rbrakk> \<Zsurj> n) in
+      (let (c2',recs2) = (*GRec\<lbrakk>c2\<rbrakk> \<Zsurj> n + recs1) in
      ((c1' #;; c2', recs1 + recs2))))" 
-  |"*$Rec\<lbrakk>#Some i\<rightharpoonup> TAIL\<rbrakk> \<Zsurj> n = (#Some n \<rightharpoonup> TAIL,1)" 
-  |"*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (c,0)"
+  |"*GRec\<lbrakk>#Some i\<rightharpoonup> TAIL\<rbrakk> \<Zsurj> n = (#Some n \<rightharpoonup> TAIL,1)" 
+  |"*GRec\<lbrakk>c\<rbrakk> \<Zsurj> B = (c,0)"
 
-declare enum_arec_calls.elims[elim]
-
-lemmas enum_arec_calls.elims
-
-lemma enum_arec_calls_Skip_fst[simp]: "fst (*$Rec\<lbrakk>#SKIP\<rbrakk> \<Zsurj> n) = #SKIP"
-  by auto
-
-lemma enum_arec_calls_Assign_fst[simp]: "fst (*$Rec\<lbrakk>#x ::= a\<rbrakk> \<Zsurj> n) = #x ::= a"
-  by auto
-lemma enum_arec_calls_Call_fst[simp]: "fst (*$Rec\<lbrakk>#CALL c RETURN r\<rbrakk> \<Zsurj> n) = #CALL c RETURN r"
-  by auto
-lemma enum_arec_calls_Push_fst[simp]: "fst (*$Rec\<lbrakk>#PUSH x\<rbrakk> \<Zsurj> n) = #PUSH x"
-  by auto
-lemma enum_arec_calls_Pop_fst[simp]: "fst (*$Rec\<lbrakk> #POP x\<rbrakk> \<Zsurj> n) = #POP x"
-  by auto
-
-lemma enum_arec_calls_Tail_fst_Some[simp]: "fst (*$Rec\<lbrakk>#Some i\<rightharpoonup> TAIL\<rbrakk> \<Zsurj> n) = #Some n\<rightharpoonup> TAIL"
-  by auto
-lemma enum_arec_calls_Tail_fst_None[simp]: "fst (*$Rec\<lbrakk>#None\<rightharpoonup> TAIL\<rbrakk> \<Zsurj> n) = #None\<rightharpoonup> TAIL"
-  by auto
-
-lemma enum_arec_calls_If_snd[simp]: 
-    "snd (*$Rec\<lbrakk>#IF b\<noteq>0 THEN c1 ELSE c2\<rbrakk>\<Zsurj> n) 
-      = (snd (*$Rec\<lbrakk>c1\<rbrakk>\<Zsurj> n)) + (snd (*$Rec\<lbrakk>c2\<rbrakk>\<Zsurj> (n + (snd (*$Rec\<lbrakk>c1\<rbrakk>\<Zsurj> n)))))"
-  apply auto 
-  by (auto simp add: case_prod_beta')
-
-lemma enum_arec_calls_Seq_snd[simp]: 
-    "snd (*$Rec\<lbrakk>c1 #;; c2\<rbrakk>\<Zsurj> n) 
-      = (snd (*$Rec\<lbrakk>c1\<rbrakk>\<Zsurj> n)) + (snd (*$Rec\<lbrakk>c2\<rbrakk>\<Zsurj> (n + (snd (*$Rec\<lbrakk>c1\<rbrakk>\<Zsurj> n)))))" 
-  by (auto simp add: case_prod_beta)
+declare enum_grec_calls.elims[elim]
 
 text \<open>Proof that semantics are preserved\<close>
 
-lemma enum_grec_asem_equiv: "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> c \<cong>\<^sub>\<turnstile>\<^sub>i cn"
-proof (induction c n arbitrary: cn rn rule: enum_arec_calls.induct)
+lemma enum_grec_sem_equiv: "*GRec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> c \<equiv>\<^sub>\<turnstile>\<^sub>i cn"
+proof (induction c n arbitrary: cn rn rule: enum_grec_calls.induct)
   case (1 b c1 c2 n)
   obtain cn1 rn1 cn2 rn2 
-    where \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
-    by fastforce
-  hence \<open>c1 \<cong>\<^sub>\<turnstile>\<^sub>i cn1\<close> \<open>c2 \<cong>\<^sub>\<turnstile>\<^sub>i cn2\<close> 
-    using "1.IH"(1) apply blast
-    by (simp add: "1.IH"(2) \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>)
-  hence \<open>#IF b\<noteq>0 THEN c1 ELSE c2 \<cong>\<^sub>\<turnstile>\<^sub>i #IF b\<noteq>0 THEN cn1 ELSE cn2\<close>
-    by simp
-  have \<open>#IF b\<noteq>0 THEN cn1 ELSE cn2 = cn\<close> using 
-        \<open>*$Rec\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close> 
-        \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close> by simp
-  then show ?case 
-    using \<open>#IF b\<noteq>0 THEN c1 ELSE c2 \<cong>\<^sub>\<turnstile>\<^sub>i #IF b\<noteq>0 THEN cn1 ELSE cn2\<close>
-    by blast
-next
-  case (2 c1 c2 n)
-  obtain cn1 rn1 cn2 rn2 
-    where \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
-    by fastforce
-  hence \<open>c1 \<cong>\<^sub>\<turnstile>\<^sub>i cn1\<close> \<open>c2 \<cong>\<^sub>\<turnstile>\<^sub>i cn2\<close> 
-    using "2.IH"(1) apply blast
-    by (simp add: "2.IH"(2) \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>)
-  hence \<open>c1 #;; c2 \<cong>\<^sub>\<turnstile>\<^sub>i cn1 #;; cn2\<close>
-    by simp
-  have \<open>cn1 #;; cn2 = cn\<close> using 
-        \<open>*$Rec\<lbrakk> c1 #;; c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close> 
-        \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close> by simp
-  then show ?case 
-    using \<open>c1 #;; c2 \<cong>\<^sub>\<turnstile>\<^sub>i cn1 #;; cn2\<close>
-    by blast
-qed auto
-
-lemma enum_grec_asem_equiv': "c \<cong>\<^sub>\<turnstile>\<^sub>i fst(*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n)"
-  by (meson enum_grec_asem_equiv eq_fst_iff)
-
-lemma enum_grec_isem_equiv: "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> c \<equiv>\<^sub>\<turnstile>\<^sub>i cn"
-proof (induction c n arbitrary: cn rn rule: enum_arec_calls.induct)
-  case (1 b c1 c2 n)
-  obtain cn1 rn1 cn2 rn2 
-    where \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
+    where \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
     by fastforce
   hence \<open>c1 \<equiv>\<^sub>\<turnstile>\<^sub>i cn1\<close> \<open>c2 \<equiv>\<^sub>\<turnstile>\<^sub>i cn2\<close> 
     using "1.IH"(1) apply blast
-    by (simp add: "1.IH"(2) \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>)
+    by (simp add: "1.IH"(2) \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
+        \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>)
   hence \<open>#IF b\<noteq>0 THEN c1 ELSE c2 \<equiv>\<^sub>\<turnstile>\<^sub>i #IF b\<noteq>0 THEN cn1 ELSE cn2\<close>
     by simp
   have \<open>#IF b\<noteq>0 THEN cn1 ELSE cn2 = cn\<close> using 
-        \<open>*$Rec\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close> 
-        \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close> by simp
+        \<open>*GRec\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close> 
+        \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
+        \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close> by simp
   then show ?case 
     using \<open>#IF b\<noteq>0 THEN c1 ELSE c2 \<equiv>\<^sub>\<turnstile>\<^sub>i #IF b\<noteq>0 THEN cn1 ELSE cn2\<close>
     by blast
 next
   case (2 c1 c2 n)
   obtain cn1 rn1 cn2 rn2 
-    where \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
+    where \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
     by fastforce
   hence \<open>c1 \<equiv>\<^sub>\<turnstile>\<^sub>i cn1\<close> \<open>c2 \<equiv>\<^sub>\<turnstile>\<^sub>i cn2\<close> 
     using "2.IH"(1) apply blast
-    by (simp add: "2.IH"(2) \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>)
+    by (simp add: "2.IH"(2) \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
+        \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>)
   hence \<open>c1 #;; c2 \<equiv>\<^sub>\<turnstile>\<^sub>i cn1 #;; cn2\<close>
     by simp
   have \<open>cn1 #;; cn2 = cn\<close> using 
-        \<open>*$Rec\<lbrakk> c1 #;; c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close> 
-        \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
-        \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close> by simp
+        \<open>*GRec\<lbrakk> c1 #;; c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close> 
+        \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>
+        \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close> by simp
   then show ?case 
     using \<open>c1 #;; c2 \<equiv>\<^sub>\<turnstile>\<^sub>i cn1 #;; cn2\<close>
     by blast
 qed auto
 
-lemma enum_grec_isem_equiv': "c \<equiv>\<^sub>\<turnstile>\<^sub>i fst(*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n)"
-  by (meson enum_grec_isem_equiv eq_fst_iff)
-
-lemma enum_grec_sound: "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
+lemma enum_grec_sound: "*GRec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
                   \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-   using enum_grec_asem_equiv asem_equiv_sound asem_equiv_sym by auto
+   using enum_grec_sem_equiv isem_equiv_sound isem_equiv_sym by auto
 
-lemma enum_grec_complete: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow> *$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)
+lemma enum_grec_complete: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow> *GRec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)
                \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)" 
-  using enum_grec_asem_equiv asem_equiv_sound by auto
+  using enum_grec_sem_equiv isem_equiv_sound by auto
 
 corollary enum_grec_correct:  
-  assumes "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)"
+  assumes "*GRec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)"
   shows "\<exists>i. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)
        \<equiv> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-  by (smt (verit) assms enum_grec_asem_equiv asem_equiv_correct)
-
-lemma enum_grec_sound_None: "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None) 
-                  \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None)"
-   using enum_grec_isem_equiv isem_equiv_sound_None isem_equiv_sym by auto
-
-lemma enum_grec_complete_None: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None) \<Longrightarrow> *$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)
-               \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None)" 
-  using enum_grec_isem_equiv isem_equiv_sound_None by auto
-
-corollary enum_grec_correct_None:  
-  assumes "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)"
-  shows "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None)
-       \<equiv> c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None)"
-  by (smt (verit) assms enum_grec_isem_equiv isem_equiv_correct_None)
-
-lemma enum_grec_sound_Some: "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some i) 
-                  \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some j)"
-   using enum_grec_isem_equiv isem_equiv_sound_Some isem_equiv_sym by auto
-
-lemma enum_grec_complete_Some: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some i) \<Longrightarrow> *$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)
-               \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some j)" 
-  using enum_grec_isem_equiv isem_equiv_sound_Some by auto
-
-corollary enum_grec_correct_Some:  
-  assumes "*$Rec\<lbrakk>c\<rbrakk> \<Zsurj> n = (cn,rn)"
-  shows "\<exists>i. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some i)
-       \<equiv> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (cn,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some j)"
-  by (smt (verit) assms enum_grec_isem_equiv isem_equiv_correct_Some)
+  by (smt (verit) assms enum_grec_sem_equiv isem_equiv_correct)
 
 subsection \<open>Specification proof\<close>
 
-fun arec_call_enumerated :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> bool * nat" ("\<turnstile>\<^bsub>*$Rec\<^esub> _ \<Zsurj> _" 55) where
-   "\<turnstile>\<^bsub>*$Rec\<^esub> #IF b\<noteq>0 THEN c1 ELSE c2 \<Zsurj> n =
-      (let (b1,recs1) = (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n) in
-      (let (b2,recs2) = (\<turnstile>\<^bsub>*$Rec\<^esub> c2 \<Zsurj> (n+recs1)) in
+fun grec_call_enumerated :: "tscom_tagged \<Rightarrow> nat \<Rightarrow> bool * nat" ("\<turnstile>\<^bsub>*GRec\<^esub> _ \<Zsurj> _" 55) where
+   "\<turnstile>\<^bsub>*GRec\<^esub> #IF b\<noteq>0 THEN c1 ELSE c2 \<Zsurj> n =
+      (let (b1,recs1) = (\<turnstile>\<^bsub>*GRec\<^esub> c1 \<Zsurj> n) in
+      (let (b2,recs2) = (\<turnstile>\<^bsub>*GRec\<^esub> c2 \<Zsurj> (n+recs1)) in
      (b1 \<and> b2, recs1 + recs2)))"
-  |"\<turnstile>\<^bsub>*$Rec\<^esub>c1 #;; c2 \<Zsurj> n = 
-      (let (b1,recs1) = (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n) in
-      (let (b2,recs2) = (\<turnstile>\<^bsub>*$Rec\<^esub> c2 \<Zsurj> (n+recs1)) in
+  |"\<turnstile>\<^bsub>*GRec\<^esub>c1 #;; c2 \<Zsurj> n = 
+      (let (b1,recs1) = (\<turnstile>\<^bsub>*GRec\<^esub> c1 \<Zsurj> n) in
+      (let (b2,recs2) = (\<turnstile>\<^bsub>*GRec\<^esub> c2 \<Zsurj> (n+recs1)) in
      (b1 \<and> b2, recs1 + recs2)))"
-  |"\<turnstile>\<^bsub>*$Rec\<^esub> #Some i\<rightharpoonup> TAIL \<Zsurj> n = (i = n,1)" 
-  |"\<turnstile>\<^bsub>*$Rec\<^esub>c \<Zsurj> n = (True,0)"
+  |"\<turnstile>\<^bsub>*GRec\<^esub> #Some i\<rightharpoonup> TAIL \<Zsurj> n = (i = n,1)" 
+  |"\<turnstile>\<^bsub>*GRec\<^esub>c \<Zsurj> n = (True,0)"
 
-declare arec_call_enumerated.elims[elim]
-
-lemmas arec_call_enumerated.elims
-
-lemma arec_call_enumerated_Skip_fst[simp]: "fst (\<turnstile>\<^bsub>*$Rec\<^esub> #SKIP \<Zsurj> n)"
-  by auto
-lemma arec_call_enumerated_Assign_fst[simp]: "fst (\<turnstile>\<^bsub>*$Rec\<^esub> #x ::= a \<Zsurj> n)"
-  by auto
-lemma arec_call_enumerated_Call_fst[simp]: "fst (\<turnstile>\<^bsub>*$Rec\<^esub>#CALL c RETURN r \<Zsurj> n)"
-  by auto
-lemma arec_call_enumerated_Push_fst[simp]: "fst (\<turnstile>\<^bsub>*$Rec\<^esub>#PUSH x \<Zsurj> n)"
-  by auto
-lemma arec_call_enumerated_fst[simp]: "fst (\<turnstile>\<^bsub>*$Rec\<^esub> #POP x \<Zsurj> n)"
-  by auto
-lemma arec_call_enumerated_Tail_fst_Some[simp]: "fst (\<turnstile>\<^bsub>*$Rec\<^esub>#Some i\<rightharpoonup> TAIL \<Zsurj> n) \<equiv> i = n"
-  by auto
-lemma arec_call_enumerated_Tail_fst_None[simp]: "fst (\<turnstile>\<^bsub>*$Rec\<^esub>#None\<rightharpoonup> TAIL \<Zsurj> n)"
-  by auto
-
-lemma arec_call_enumerated_If_fst[simp]: 
-    "fst (\<turnstile>\<^bsub>*$Rec\<^esub> #IF b\<noteq>0 THEN c1 ELSE c2 \<Zsurj> n) 
-      \<equiv> (fst (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)) \<and> (fst (\<turnstile>\<^bsub>*$Rec\<^esub> c2 \<Zsurj> (n + (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)))))"
-  apply auto 
-  by (auto simp add: case_prod_beta')
-
-lemma arec_call_enumerated_Seq_fst[simp]: 
-    "fst (\<turnstile>\<^bsub>*$Rec\<^esub> c1 #;; c2 \<Zsurj> n) 
-      \<equiv> (fst (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)) \<and> (fst (\<turnstile>\<^bsub>*$Rec\<^esub> c2 \<Zsurj> (n + (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)))))"
-  apply auto 
-  by (auto simp add: case_prod_beta')
-
-lemma arec_call_enumerated_If_snd[simp]: 
-    "snd (\<turnstile>\<^bsub>*$Rec\<^esub> #IF b\<noteq>0 THEN c1 ELSE c2 \<Zsurj> n) 
-      = (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)) + (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c2 \<Zsurj> (n + (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)))))"
-  apply auto 
-  by (auto simp add: case_prod_beta')
-
-lemma arec_call_enumerated_Seq_snd[simp]: 
-    "snd (\<turnstile>\<^bsub>*$Rec\<^esub> c1 #;; c2 \<Zsurj> n) 
-      = (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)) + (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c2 \<Zsurj> (n + (snd (\<turnstile>\<^bsub>*$Rec\<^esub> c1 \<Zsurj> n)))))"
-  apply auto 
-  by (auto simp add: case_prod_beta')
-
-lemma grec_calls_enumerated: "*$Rec\<lbrakk> c \<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> \<turnstile>\<^bsub>*$Rec\<^esub> cn \<Zsurj> n = (True,rn)"
-proof (induction c n arbitrary: cn rn rule: enum_arec_calls.induct)
+lemma grec_calls_enumerated: "*GRec\<lbrakk> c \<rbrakk> \<Zsurj> n = (cn,rn) \<Longrightarrow> \<turnstile>\<^bsub>*GRec\<^esub> cn \<Zsurj> n = (True,rn)"
+proof (induction c n arbitrary: cn rn rule: enum_grec_calls.induct)
   case (1 b c1 c2 n)
-  from \<open>*$Rec\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close>
+  from \<open>*GRec\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close>
   obtain cn1 cn2 rn1 rn2 
-    where \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
+    where \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
     by (metis old.prod.exhaust)
-  hence \<open>*$Rec\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> \<Zsurj> n = (#IF b\<noteq>0 THEN cn1 ELSE cn2, rn1 + rn2)\<close> 
-    by (metis (lifting) enum_arec_calls.simps(1) old.prod.case)
+  hence \<open>*GRec\<lbrakk> #IF b\<noteq>0 THEN c1 ELSE c2 \<rbrakk> \<Zsurj> n = (#IF b\<noteq>0 THEN cn1 ELSE cn2, rn1 + rn2)\<close> 
+    by (metis (lifting) enum_grec_calls.simps(1) old.prod.case)
   hence \<open>cn = #IF b\<noteq>0 THEN cn1 ELSE cn2\<close> \<open>rn = rn1 + rn2\<close> 
     using "1.prems" by auto
-  have \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> 
-    using 1(1)[OF \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>] by auto
-  have \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> 
-    using \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
+  have \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> 
+    using 1(1)[OF \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>] by auto
+  have \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> 
+    using \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
     by (simp add: "1.IH"(2))
-  from \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> have
-   \<open>\<turnstile>\<^bsub>*$Rec\<^esub> #IF b\<noteq>0 THEN cn1 ELSE cn2 \<Zsurj> n = (True, rn1+rn2)\<close> by auto
+  from \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> have
+   \<open>\<turnstile>\<^bsub>*GRec\<^esub> #IF b\<noteq>0 THEN cn1 ELSE cn2 \<Zsurj> n = (True, rn1+rn2)\<close> by auto
   then show ?case
     by (simp add: \<open>cn = #IF b\<noteq>0 THEN cn1 ELSE cn2\<close> \<open>rn = rn1 + rn2\<close>)
 next
   case (2 c1 c2 n)
-  from \<open>*$Rec\<lbrakk> c1 #;; c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close>
+  from \<open>*GRec\<lbrakk> c1 #;; c2 \<rbrakk> \<Zsurj> n = (cn, rn)\<close>
   obtain cn1 cn2 rn1 rn2 
-    where \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
+    where \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
     by (metis old.prod.exhaust)
-  hence \<open>*$Rec\<lbrakk> c1 #;; c2 \<rbrakk> \<Zsurj> n = (cn1 #;; cn2, rn1 + rn2)\<close> 
-    by (metis (lifting) enum_arec_calls.simps(2) old.prod.case)
+  hence \<open>*GRec\<lbrakk> c1 #;; c2 \<rbrakk> \<Zsurj> n = (cn1 #;; cn2, rn1 + rn2)\<close> 
+    by (metis (lifting) enum_grec_calls.simps(2) old.prod.case)
   hence \<open>cn = cn1 #;; cn2\<close> \<open>rn = rn1 + rn2\<close> 
     using "2.prems" by auto
-  have \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> 
-    using 2(1)[OF \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>] by auto
-  have \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> 
-    using \<open>*$Rec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*$Rec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
+  have \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> 
+    using 2(1)[OF \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close>] by auto
+  have \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> 
+    using \<open>*GRec\<lbrakk> c1 \<rbrakk> \<Zsurj> n = (cn1, rn1)\<close> \<open>*GRec\<lbrakk> c2 \<rbrakk> \<Zsurj> n + rn1 = (cn2, rn2)\<close>
     by (simp add: "2.IH"(2))
-  from \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> have
-   \<open>\<turnstile>\<^bsub>*$Rec\<^esub> cn1 #;; cn2 \<Zsurj> n = (True, rn1+rn2)\<close> by auto
+  from \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn1 \<Zsurj> n = (True, rn1)\<close> \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn2 \<Zsurj> n + rn1 = (True, rn2)\<close> have
+   \<open>\<turnstile>\<^bsub>*GRec\<^esub> cn1 #;; cn2 \<Zsurj> n = (True, rn1+rn2)\<close> by auto
   then show ?case
     by (simp add: \<open>cn = cn1 #;; cn2\<close> \<open>rn = rn1 + rn2\<close>)
 qed auto
 
-fun max_index :: "tscom_tagged \<Rightarrow> nat" ("max{_}\<^sub>i") where
-   "max{#IF b\<noteq>0 THEN c1 ELSE c2}\<^sub>i = max max{c1}\<^sub>i max{c2}\<^sub>i" 
-  |"max{c1 #;; c2}\<^sub>i = max max{c1}\<^sub>i max{c2}\<^sub>i" 
-  |"max{#Some i\<rightharpoonup> TAIL}\<^sub>i = i" 
-  |"max{_}\<^sub>i = 0"
+subsection \<open>Proof that normalization property is preserved\<close>
 
-lemma max_index_offset: "stails_tagged c \<Longrightarrow> \<turnstile>\<^bsub>$Rec\<^esub> c \<Longrightarrow> fst (\<turnstile>\<^bsub>*$Rec\<^esub> c \<Zsurj> n) \<Longrightarrow> max{c}\<^sub>i \<ge> n"
-  apply (induction c n rule: arec_call_enumerated.induct)
-  apply auto 
-  apply (simp add: case_prod_beta)
-  apply (simp add: case_prod_beta)
-  apply (metis add_leE dual_order.trans max.cobounded2 surjective_pairing)
-  apply (simp add: case_prod_beta)
-  by (metis add_leD1 arec_call_enumerated.simps(2) arec_call_enumerated_Seq_fst le_max_iff_disj prod.split_sel)
-
-
-fun rec_count :: "tscom_tagged \<Rightarrow> nat" ("|_|\<^bsub>Rec\<^esub>") where
-   "|#IF b\<noteq>0 THEN c1 ELSE c2|\<^bsub>Rec\<^esub> = |c1|\<^bsub>Rec\<^esub> + |c2|\<^bsub>Rec\<^esub>" 
-  |"|c1 #;; c2|\<^bsub>Rec\<^esub> = |c1|\<^bsub>Rec\<^esub> + |c2|\<^bsub>Rec\<^esub>" 
-  |"|#i\<rightharpoonup> TAIL|\<^bsub>Rec\<^esub> = 1" 
-  |"|_|\<^bsub>Rec\<^esub> = 0"
-
-fun arec_count :: "tscom_tagged \<Rightarrow> nat" ("|_|\<^bsub>$Rec\<^esub>") where
-   "|#IF b\<noteq>0 THEN c1 ELSE c2|\<^bsub>$Rec\<^esub> = |c1|\<^bsub>$Rec\<^esub> + |c2|\<^bsub>$Rec\<^esub>" 
-  |"|c1 #;; c2|\<^bsub>$Rec\<^esub> = |c1|\<^bsub>$Rec\<^esub> + |c2|\<^bsub>$Rec\<^esub>" 
-  |"|#Some i\<rightharpoonup> TAIL |\<^bsub>$Rec\<^esub> = 1" 
-  |"|_|\<^bsub>$Rec\<^esub> = 0"
-
-fun trec_count :: "tscom_tagged \<Rightarrow> nat" ("|_|\<^bsub>Tail\<^esub>") where
-   "|#IF b\<noteq>0 THEN c1 ELSE c2|\<^bsub>Tail\<^esub> = |c1|\<^bsub>Tail\<^esub> + |c2|\<^bsub>Tail\<^esub>" 
-  |"|c1 #;; c2|\<^bsub>Tail\<^esub> = |c2|\<^bsub>Tail\<^esub>" 
-  |"|#i\<rightharpoonup> TAIL |\<^bsub>Tail\<^esub> = 1" 
-  |"|_|\<^bsub>Tail\<^esub> = 0" 
-
-fun atrec_count :: "tscom_tagged \<Rightarrow> nat" ("|_|\<^bsub>$Tail\<^esub>") where
-   "|#IF b\<noteq>0 THEN c1 ELSE c2|\<^bsub>$Tail\<^esub> = |c1|\<^bsub>$Tail\<^esub> + |c2|\<^bsub>$Tail\<^esub>" 
-  |"|c1 #;; c2|\<^bsub>$Tail\<^esub> = |c2|\<^bsub>$Tail\<^esub>" 
-  |"|#Some i\<rightharpoonup> TAIL |\<^bsub>$Tail\<^esub> = 1" 
-  |"|_|\<^bsub>$Tail\<^esub> = 0" 
-
-definition grec_count :: "tscom_tagged \<Rightarrow> nat" ("|_|\<^bsub>Grec\<^esub>") where
- "|c|\<^bsub>Grec\<^esub> = |c|\<^bsub>Rec\<^esub> -|c|\<^bsub>Tail\<^esub>"
-
-definition agrec_count :: "tscom_tagged \<Rightarrow> nat" ("|_|\<^bsub>$Grec\<^esub>") where
- "|c|\<^bsub>$Grec\<^esub> = |c|\<^bsub>$Rec\<^esub> -|c|\<^bsub>$Tail\<^esub>"
-
-lemma no_rec_enumerated_count: "\<not>stails_tagged c \<Longrightarrow> snd (*$Rec\<lbrakk> c \<rbrakk> \<Zsurj> n) = 0"
-  by (induction c arbitrary: n rule: stails_tagged.induct) (auto simp add: case_prod_beta')
-
-lemma no_rec_enumerated_count': "\<not>stails_tagged c \<Longrightarrow> snd (\<turnstile>\<^bsub>*$Rec\<^esub> c  \<Zsurj> n) = 0"
-  by (induction c arbitrary: n rule: stails_tagged.induct) (auto simp add: case_prod_beta')
-
-lemma arec_enumerated_count: "snd (*$Rec\<lbrakk> c \<rbrakk> \<Zsurj> n) = |c|\<^bsub>$Rec\<^esub>"
-  apply (induction c n rule: enum_arec_calls.induct) apply auto
-   apply (metis (no_types, lifting) case_prod_Pair_iden case_prod_beta' snd_conv)
-  by (metis (no_types, lifting) case_prod_beta' old.prod.exhaust snd_conv)
-
-lemma atrec_enumerated_count: "sinvar_tagged c \<Longrightarrow> snd (*$Rec\<lbrakk> c \<rbrakk> \<Zsurj> n) =  |c|\<^bsub>$Tail\<^esub>"
-  apply (induction c n rule: enum_arec_calls.induct) apply auto
-   apply (metis (no_types, lifting) case_prod_Pair_iden case_prod_beta' snd_conv)
-  by (metis add_0 arec_count.simps(2) arec_enumerated_count enum_arec_calls.simps(2) no_rec_enumerated_count
-      surj_pair)
-
-text \<open>Proof that semantics are preserved after complete compilation to TCSI\<close>
-
-lemma TCS_to_TCSI_equiv: "fst (*$Rec\<lbrakk>\<diamondop>$GRec\<lbrakk> c \<rbrakk>\<rbrakk> \<Zsurj> n) \<cong>\<^sub>\<turnstile>\<^sub>i c"
-  by (meson enum_grec_asem_equiv eq_fst_iff igrec_sem_equiv asem_equiv_assoc
-      asem_equiv_sym)
-
-lemma TCS_to_TCSI_sound:"c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',i) \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (fst (*$Rec\<lbrakk> \<diamondop>$GRec\<lbrakk> c \<rbrakk> \<rbrakk> \<Zsurj> n),s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',j)"
-  by (meson TCS_to_TCSI_equiv asem_equiv_correct)
-
-lemma TCS_to_TCSI_complete:"c' \<turnstile>Rec\<rightharpoonup>i (fst (*$Rec\<lbrakk>\<diamondop>$GRec\<lbrakk> c \<rbrakk>\<rbrakk> \<Zsurj> n),s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',i) \<Longrightarrow> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',j)"
-  using TCS_to_TCSI_equiv asem_equiv_sound by auto
-
-corollary TCS_to_TCSI_correct:  
-        "\<exists>i. c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)
-       \<equiv> \<exists>j. c' \<turnstile>Rec\<rightharpoonup>i (fst (*$Rec\<lbrakk>\<diamondop>$GRec\<lbrakk> c \<rbrakk>\<rbrakk> \<Zsurj> n),s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-  by (smt (z3) TCS_to_TCSI_equiv asem_equiv_correct)
-
-
+lemma intermediate_equiv: "fst (*GRec\<lbrakk> \<diamondop>GRec\<lbrakk> c \<rbrakk> \<rbrakk> \<Zsurj> n) \<equiv>\<^sub>\<turnstile>\<^sub>i c"
+  by (meson enum_grec_sem_equiv eq_fst_iff igrec_sem_equiv isem_equiv_assoc
+      isem_equiv_sym)
 
 end
