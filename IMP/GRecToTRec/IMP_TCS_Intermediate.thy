@@ -31,7 +31,7 @@ instantiation tscom_tagged :: vars
 begin
 
 fun vars_tscom_tagged :: "tscom_tagged \<Rightarrow> vname list" where
-"vars_tscom_tagged (# x ::= a)  = x # vars a" |
+"vars_tscom_tagged (#x ::= a)  = x # vars a" |
 "vars_tscom_tagged (c\<^sub>1#;;c\<^sub>2) = vars_tscom_tagged c\<^sub>1 @ vars_tscom_tagged c\<^sub>2" |
 "vars_tscom_tagged (#IF b\<noteq>0 THEN c1 ELSE c2) = b # vars_tscom_tagged c1 @ vars_tscom_tagged c2" |
 "vars_tscom_tagged (#CALL c RETURN r) = r#vars c" |
@@ -84,7 +84,7 @@ fun stails_tagged :: "tscom_tagged \<Rightarrow> bool" where
   "stails_tagged _ \<longleftrightarrow> False"
 
 fun sinvar_tagged :: "tscom_tagged \<Rightarrow> bool" where
-  "sinvar_tagged (c\<^sub>1#;;c\<^sub>2) \<longleftrightarrow> \<not>sinvar_tagged c\<^sub>1 \<and> sinvar_tagged c\<^sub>2" |
+  "sinvar_tagged (c\<^sub>1#;;c\<^sub>2) \<longleftrightarrow> \<not>stails_tagged c\<^sub>1 \<and> sinvar_tagged c\<^sub>2" |
   "sinvar_tagged (#IF b\<noteq>0 THEN c\<^sub>1 ELSE c\<^sub>2) \<longleftrightarrow> sinvar_tagged c\<^sub>1 \<and> sinvar_tagged c\<^sub>2" |
   "sinvar_tagged _ \<longleftrightarrow> True"
 
@@ -97,11 +97,12 @@ fun pop_many_tagged :: "vname list \<Rightarrow> tscom_tagged" ("(#POP# _ )"  [6
 "pop_many_tagged (v#vs) = (#POP v)  #;; pop_many_tagged vs" 
 
 inductive
-  last_rec_index :: "tscom_tagged \<Rightarrow> tscom_tagged \<times> state \<times> fstack \<Rightarrow> nat \<Rightarrow> state \<times> fstack \<times> nat option \<Rightarrow> bool" ("_ \<turnstile>Rec\<rightharpoonup>i _ \<Rightarrow>\<^bsup> _ \<^esup> _" 55)
+  first_rec_index :: "tscom_tagged \<Rightarrow> tscom_tagged \<times> state \<times> fstack \<Rightarrow> nat \<Rightarrow> state \<times> fstack \<times> nat option \<Rightarrow> bool" ("_ \<turnstile>Rec\<rightharpoonup>i _ \<Rightarrow>\<^bsup> _ \<^esup> _" 55)
   where
 iSkip: "c \<turnstile>Rec\<rightharpoonup>i (#SKIP,s,stack) \<Rightarrow>\<^bsup>Suc (0::nat) \<^esup> (s,stack,None)" |
 iAssign: "c \<turnstile>Rec\<rightharpoonup>i (#x ::= a,s,stack) \<Rightarrow>\<^bsup>Suc (Suc 0) \<^esup> (s(x := aval a s),stack,None)" |
-iSeq: "\<lbrakk>c \<turnstile>Rec\<rightharpoonup>i (c1,s1,stack1) \<Rightarrow>\<^bsup>x\<^esup> (s2,stack2,n) ; c \<turnstile>Rec\<rightharpoonup>i (c2,s2,stack2) \<Rightarrow>\<^bsup>y\<^esup> (s3,stack3,r) ; z=x+y\<rbrakk> \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (c1 #;; c2, s1,stack1) \<Rightarrow>\<^bsup>z\<^esup> (s3,stack3,r)" |
+iSeqNone: "\<lbrakk>c \<turnstile>Rec\<rightharpoonup>i (c1,s1,stack1) \<Rightarrow>\<^bsup>x\<^esup> (s2,stack2,None) ; c \<turnstile>Rec\<rightharpoonup>i (c2,s2,stack2) \<Rightarrow>\<^bsup>y\<^esup> (s3,stack3,i2) ; z=x+y\<rbrakk> \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (c1 #;; c2, s1,stack1) \<Rightarrow>\<^bsup>z\<^esup> (s3,stack3,i2)" |
+iSeqSome: "\<lbrakk>c \<turnstile>Rec\<rightharpoonup>i (c1,s1,stack1) \<Rightarrow>\<^bsup>x\<^esup> (s2,stack2,Some i) ; c \<turnstile>Rec\<rightharpoonup>i (c2,s2,stack2) \<Rightarrow>\<^bsup>y\<^esup> (s3,stack3,j) ; z=x+y\<rbrakk> \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (c1 #;; c2, s1,stack1) \<Rightarrow>\<^bsup>z\<^esup> (s3,stack3,Some i)" |
 iIfTrue: "\<lbrakk>s b \<noteq> 0; c \<turnstile>Rec\<rightharpoonup>i (c1,s,stack) \<Rightarrow>\<^bsup>x \<^esup> s'; y=x+1 \<rbrakk> \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>y \<^esup> s'" |
 iIfFalse: "\<lbrakk>s b = 0; c \<turnstile>Rec\<rightharpoonup>i (c2,s,stack) \<Rightarrow>\<^bsup>x \<^esup> s'; y=x+1  \<rbrakk> \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>y \<^esup> s'" |
 iCall: "(C,s) \<Rightarrow>\<^bsup>z \<^esup> t \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (#CALL C RETURN r,s,stack) \<Rightarrow>\<^bsup>z \<^esup> (s(r:=t r),stack,None)" |
@@ -109,38 +110,72 @@ iRec: "c \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup> z \
 iPush: "c \<turnstile>Rec\<rightharpoonup>i  (#PUSH x,s,stack) \<Rightarrow>\<^bsup>Suc 0 \<^esup> (s, stack(x := s x # stack x),None)"|
 iPop: "stack x = Cons v vx \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (#POP x,s,stack) \<Rightarrow>\<^bsup>Suc 0 \<^esup> (s(x := v), stack(x := vx),None)"
 \<comment> \<open>New rule\<close>
-bundle last_rec_index
+bundle first_rec_index
 begin
-notation last_rec_index ("_ \<turnstile>Rec\<rightharpoonup>i _ \<Rightarrow> _" 55)
+notation first_rec_index ("_ \<turnstile>Rec\<rightharpoonup>i _ \<Rightarrow> _" 55)
 end
 
-code_pred last_rec_index .
+code_pred first_rec_index .
 
-declare last_rec_index.intros[intro]
+declare first_rec_index.intros[intro]
 
-lemmas last_rec_index_induct = last_rec_index.induct[split_format(complete)]
+lemmas first_rec_index_induct = first_rec_index.induct[split_format(complete)]
 
-inductive_cases iSkip_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#SKIP,s) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
-inductive_cases iAssign_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#x ::= a,s) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
-inductive_cases iSeq_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (c1#;;c2,s1) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
-inductive_cases iIf_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2,s) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
-inductive_cases iCall_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#CALL C RETURN ret,s) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
-inductive_cases iRec_tE[elim]: "c \<turnstile>Rec\<rightharpoonup>i (#n\<rightharpoonup>TAIL,s) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
-inductive_cases iPush_tE[elim]: "c \<turnstile>Rec\<rightharpoonup>i (#PUSH x,s) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
-inductive_cases iPop_tE[elim]: "c \<turnstile>Rec\<rightharpoonup>i (#POP x,s) \<Rightarrow>\<^bsup>t\<^esup> (s',r)"
+inductive_cases iSkip_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#SKIP,s,stack) \<Rightarrow>\<^bsup>t\<^esup> s'"
+inductive_cases iAssign_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#x ::= a,s,stack) \<Rightarrow>\<^bsup>t\<^esup> s'"
+inductive_cases iSeq_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (c1#;;c2,s1) \<Rightarrow>\<^bsup>t\<^esup> s3"
+inductive_cases iIf_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i)"
+inductive_cases iCall_tE[elim!]: "c \<turnstile>Rec\<rightharpoonup>i (#CALL C RETURN ret,s) \<Rightarrow>\<^bsup>t\<^esup> s'"
+inductive_cases iRec_tE[elim]: "c \<turnstile>Rec\<rightharpoonup>i (#n\<rightharpoonup>TAIL,s) \<Rightarrow>\<^bsup>t\<^esup> s'"
+inductive_cases iPush_tE[elim]: "c \<turnstile>Rec\<rightharpoonup>i (#PUSH x,s) \<Rightarrow>\<^bsup>t\<^esup> s'"
+inductive_cases iPop_tE[elim]: "c \<turnstile>Rec\<rightharpoonup>i (#POP x,s) \<Rightarrow>\<^bsup>t\<^esup> s'"
 
+lemma iSeqNone': "\<lbrakk> c \<turnstile>Rec\<rightharpoonup>i (c1,s1,stack1) \<Rightarrow>\<^bsup> x \<^esup> (s2,stack2,None); c \<turnstile>Rec\<rightharpoonup>i (c2,s2,stack2) \<Rightarrow>\<^bsup> y \<^esup> (s3,stack3,j)\<rbrakk> 
+            \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (c1#;;c2, s1,stack1) \<Rightarrow>\<^bsup> x + y \<^esup> (s3,stack3,j)"
+  by auto
+
+lemma iSeqSome': "\<lbrakk> c \<turnstile>Rec\<rightharpoonup>i (c1,s1,stack1) \<Rightarrow>\<^bsup> x \<^esup> (s2,stack2,Some i); c \<turnstile>Rec\<rightharpoonup>i (c2,s2,stack2) \<Rightarrow>\<^bsup> y \<^esup> (s3,stack3,j)\<rbrakk> 
+            \<Longrightarrow> c \<turnstile>Rec\<rightharpoonup>i (c1#;;c2, s1,stack1) \<Rightarrow>\<^bsup> x + y \<^esup> (s3,stack3,Some i)"
+  by auto
+
+lemma iSeq_annot_Ex: "\<lbrakk>\<exists>i. c \<turnstile>Rec\<rightharpoonup>i (c1,s1,stack1) \<Rightarrow>\<^bsup> x \<^esup> (s2,stack2,i); \<exists>j. c \<turnstile>Rec\<rightharpoonup>i (c2,s2,stack2) \<Rightarrow>\<^bsup> y \<^esup> (s3,stack3,j)\<rbrakk> 
+            \<Longrightarrow>\<exists>l. c \<turnstile>Rec\<rightharpoonup>i (c1#;;c2, s1,stack1) \<Rightarrow>\<^bsup> x + y \<^esup> (s3,stack3,l)"
+  apply auto by (metis iSeqNone' iSeqSome' option.exhaust)
+
+lemma iIfTrue_annot_Ex: "\<lbrakk>s b \<noteq> 0; \<exists>i. c \<turnstile>Rec\<rightharpoonup>i (c1,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',i); y=x+1 \<rbrakk> 
+                          \<Longrightarrow>\<exists>j. c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>y \<^esup> (s',stack',j)"
+  by blast
+
+lemma iIfFalse_annot_Ex: "\<lbrakk>s b = 0; \<exists>i. c \<turnstile>Rec\<rightharpoonup>i (c2,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',i); y=x+1 \<rbrakk> 
+                          \<Longrightarrow>\<exists>j. c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>y \<^esup> (s',stack',j)"
+  by blast
+
+lemma iIfTrue_index_Ex: "\<lbrakk>s b \<noteq> 0; \<exists>i. c \<turnstile>Rec\<rightharpoonup>i (c1,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',Some i); y=x+1 \<rbrakk> 
+                          \<Longrightarrow>\<exists>j. c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>y \<^esup> (s',stack',Some j)"
+  by blast
+
+lemma iIfFalse_index_Ex: "\<lbrakk>s b = 0; \<exists>i. c \<turnstile>Rec\<rightharpoonup>i (c2,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',Some i); y=x+1 \<rbrakk> 
+                          \<Longrightarrow>\<exists>j. c \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s, stack) \<Rightarrow>\<^bsup>y \<^esup> (s',stack',Some j)"
+  by blast
+
+lemma iTail_annot: "c \<turnstile>Rec\<rightharpoonup>i (#n\<rightharpoonup>TAIL,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',n') \<Longrightarrow> n = n'"
+  by blast
+
+lemma iassign_t_simp:
+  "(c \<turnstile>Rec\<rightharpoonup>i (#x ::= a,s,stack) \<Rightarrow>\<^bsup> Suc(Suc 0) \<^esup>  (s',stack',i)) \<longleftrightarrow> (s' = s(x := aval a s)) \<and> stack = stack' \<and> i = None"
+  by (auto)
 
 lemma lri_noninterference: 
   "\<lbrakk>c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>x \<^esup> (s',stack',r); set (vars c) \<subseteq> S; set (vars c') \<subseteq> S; v \<notin> S \<rbrakk> \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c,s(v:=y),stack) \<Rightarrow>\<^bsup>x \<^esup> (s'(v:=y),stack',r)"
-proof (induction c' c s stack x s' stack' r rule: last_rec_index_induct)
+proof (induction c' c s stack x s' stack' r rule: first_rec_index_induct)
   case (iAssign c x a s stack )
   hence " s(v := y, x := aval a (s(v := y))) = s(x := aval a s, v := y)" by force
-  thus ?case using last_rec_index.iAssign[of c x a "s(v:=y)" stack] by argo
+  thus ?case using first_rec_index.iAssign[of c x a "s(v:=y)" stack] by argo
 next
   case (iCall C s z t c r stack)
   hence Call: "(C, s(v := y)) \<Rightarrow>\<^bsup>z \<^esup> t(v := y)" using fresh_var_changed by fastforce
   from iCall have state: " s(v := y, r := (t(v := y)) r) = s(r := t r, v := y)" by auto
-  show ?case using last_rec_index.iCall[OF Call, of c r] state 
+  show ?case using first_rec_index.iCall[OF Call, of c r] state 
     by metis
 next
   case (iRec c s ret z r n)
@@ -151,7 +186,7 @@ next
   have \<open>v \<noteq> x\<close> using \<open>set (vars #PUSH x) \<subseteq> S\<close> \<open>v \<notin> S\<close> by auto
   hence \<open>(s(v := y)) x = s x\<close> by simp
   then show ?case 
-    by (metis last_rec_index.iPush)
+    by (metis first_rec_index.iPush)
 next
   case (iPop stack x va vx c s )
   have \<open>v \<noteq> x\<close> using \<open>set (vars #POP x) \<subseteq> S\<close> \<open>v \<notin> S\<close> by auto
@@ -163,7 +198,7 @@ qed auto
 
 lemma lri_deterministic:
   "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack',r) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup> t' \<^esup> (s'',stack'',r') \<Longrightarrow> t = t' \<and> s' = s'' \<and> stack' = stack'' \<and> r = r'"
-proof (induction c' c s stack t s' stack' r arbitrary: t' s'' stack'' r' rule: last_rec_index_induct)
+proof (induction c' c s stack t s' stack' r arbitrary: t' s'' stack'' r' rule: first_rec_index_induct)
   case (iIfTrue s b c c1 stack x a a b y c2)
   then show ?case by fastforce
 next
@@ -185,7 +220,7 @@ next
 qed blast+
 
 lemma lri_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack',r) \<Longrightarrow> #\<lbrakk> c' \<rbrakk>\<inverse> \<turnstile> (#\<lbrakk> c \<rbrakk>\<inverse>,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack')"
-proof (induction c' c s stack t s' stack' r rule: last_rec_index_induct)
+proof (induction c' c s stack t s' stack' r rule: first_rec_index_induct)
   case (iAssign c x a s stack)
   then show ?case  
     using tAssign untag_tscom.simps(5) by presburger
@@ -225,32 +260,122 @@ qed auto
 lemma lri_correct: "c' \<turnstile> (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack') \<equiv> #\<lbrakk>c'\<rbrakk> \<turnstile>Rec\<rightharpoonup>i (#\<lbrakk>c\<rbrakk>,s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack',None)"
   by (smt (verit, del_insts) lri_complete lri_sound tscom_tag_correct)
 
+lemma iIfI:
+"\<lbrakk>s b \<noteq> 0 \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c1,s,stack) \<Rightarrow>\<^bsup> t1 \<^esup> (s1,stack1,i1);
+  s b = 0 \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c2,s,stack) \<Rightarrow>\<^bsup> t2 \<^esup> (s2,stack2,i2);
+  t = (if s b \<noteq> 0 then t1 else t2) + 1;
+  s' = (if s b \<noteq> 0 then s1 else s2);
+  stack' = (if s b \<noteq> 0 then stack1 else stack2);
+  i = (if s b \<noteq> 0 then i1 else i2)\<rbrakk>
+        \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s,stack) \<Rightarrow>\<^bsup> t \<^esup> (s',stack',i)"
+  by (auto simp add: IfTrue IfFalse)
+
+lemma iIfE:
+"c' \<turnstile>Rec\<rightharpoonup>i (#IF b \<noteq>0 THEN c1 ELSE c2, s,stack) 
+  \<Rightarrow>\<^bsup> (if s b \<noteq> 0 then t1 else t2) + 1 \<^esup> ((if s b \<noteq> 0 then s1 else s2),(if s b \<noteq> 0 then stack1 else stack2),(if s b \<noteq> 0 then i1 else i2)) \<Longrightarrow>
+ \<lbrakk>\<lbrakk>s b \<noteq> 0; (if s b \<noteq> 0 then t1 else t2) + 1 = t1 + 1;
+  (if s b \<noteq> 0 then s1 else s2) = s1; 
+  (if s b \<noteq> 0 then stack1 else stack2) = stack1;
+  (if s b \<noteq> 0 then i1 else i2) = i1;
+  c' \<turnstile>Rec\<rightharpoonup>i (c1,s,stack) \<Rightarrow>\<^bsup> t1 \<^esup> (s1,stack1,i1)\<rbrakk> \<Longrightarrow> P;
+  \<lbrakk>s b = 0; (if s b \<noteq> 0 then t1 else t2) + 1 = t2 + 1;
+  (if s b \<noteq> 0 then s1 else s2) = s2; 
+  (if s b \<noteq> 0 then stack1 else stack2) = stack2;
+  (if s b \<noteq> 0 then i1 else i2) = i2;
+  c' \<turnstile>Rec\<rightharpoonup>i (c2,s,stack) \<Rightarrow>\<^bsup> t2 \<^esup> (s2,stack2,i2)\<rbrakk> \<Longrightarrow> P\<rbrakk>
+        \<Longrightarrow> P"
+  by (auto simp add: IfTrue IfFalse)
+
+text \<open>Equivalence up to annotation\<close>
+
+fun asem_equiv :: "tscom_tagged \<Rightarrow> tscom_tagged \<Rightarrow> bool" ("_ \<cong>\<^sub>\<turnstile>\<^sub>i _") where
+  "(ct1 #;; ct2) \<cong>\<^sub>\<turnstile>\<^sub>i (ct1' #;; ct2') \<longleftrightarrow> ((ct1 \<cong>\<^sub>\<turnstile>\<^sub>i ct1') \<and> (ct2 \<cong>\<^sub>\<turnstile>\<^sub>i ct2'))" |
+  "((#IF b\<noteq>0 THEN ct1 ELSE ct2) \<cong>\<^sub>\<turnstile>\<^sub>i (#IF b'\<noteq>0 THEN ct1' ELSE ct2')) \<longleftrightarrow> ((ct1 \<cong>\<^sub>\<turnstile>\<^sub>i ct1') \<and> (ct2 \<cong>\<^sub>\<turnstile>\<^sub>i ct2') \<and> b = b')" |
+  "(#i\<rightharpoonup> TAIL) \<cong>\<^sub>\<turnstile>\<^sub>i (#j\<rightharpoonup> TAIL) = True" |
+  "c \<cong>\<^sub>\<turnstile>\<^sub>i c' \<longleftrightarrow> c = c'" 
+
+declare asem_equiv.elims[elim]
+
+lemma asem_equiv_refl: "c \<cong>\<^sub>\<turnstile>\<^sub>i c"
+  by (induction c) fastforce+
+
+lemma asem_equiv_sym: "c \<cong>\<^sub>\<turnstile>\<^sub>i c' \<longleftrightarrow> c' \<cong>\<^sub>\<turnstile>\<^sub>i c"
+  by (induction c c' rule: asem_equiv.induct) fastforce+
+
+lemma asem_equiv_assoc: "\<lbrakk>c \<cong>\<^sub>\<turnstile>\<^sub>i c';c' \<cong>\<^sub>\<turnstile>\<^sub>i c''\<rbrakk> \<Longrightarrow> c \<cong>\<^sub>\<turnstile>\<^sub>i c''"
+  by (induction c c' arbitrary: c'' rule: asem_equiv.induct) auto
+
+lemma asem_equiv_sound:
+  "d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow>
+   c \<cong>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> 
+  \<exists>j. d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
+  apply (induction c c' arbitrary: d s stack t s' stack' i rule: asem_equiv.induct) 
+                      apply auto 
+  using iSeq_annot_Ex apply metis
+  using iSeq_annot_Ex apply metis
+  using iIfTrue_annot_Ex apply simp
+  using iIfFalse_annot_Ex apply simp
+  by blast
+
+lemma asem_equiv_correct:
+  "c \<cong>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> 
+  \<exists>i. d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<equiv> \<exists>j. d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
+  using asem_equiv_sym asem_equiv_sound by (smt (verit, best))
+
+text \<open>Equivalence up to indexing\<close>
+
 fun isem_equiv :: "tscom_tagged \<Rightarrow> tscom_tagged \<Rightarrow> bool" ("_ \<equiv>\<^sub>\<turnstile>\<^sub>i _") where
   "(ct1 #;; ct2) \<equiv>\<^sub>\<turnstile>\<^sub>i (ct1' #;; ct2') \<longleftrightarrow> ((ct1 \<equiv>\<^sub>\<turnstile>\<^sub>i ct1') \<and> (ct2 \<equiv>\<^sub>\<turnstile>\<^sub>i ct2'))" |
   "((#IF b\<noteq>0 THEN ct1 ELSE ct2) \<equiv>\<^sub>\<turnstile>\<^sub>i (#IF b'\<noteq>0 THEN ct1' ELSE ct2')) \<longleftrightarrow> ((ct1 \<equiv>\<^sub>\<turnstile>\<^sub>i ct1') \<and> (ct2 \<equiv>\<^sub>\<turnstile>\<^sub>i ct2') \<and> b = b')" |
-  "(#i\<rightharpoonup> TAIL) \<equiv>\<^sub>\<turnstile>\<^sub>i (#j\<rightharpoonup> TAIL) = True" |
+  "(#None\<rightharpoonup> TAIL) \<equiv>\<^sub>\<turnstile>\<^sub>i (#None\<rightharpoonup> TAIL) \<longleftrightarrow> True" |
+  "(#Some i\<rightharpoonup> TAIL) \<equiv>\<^sub>\<turnstile>\<^sub>i (#Some j\<rightharpoonup> TAIL) \<longleftrightarrow> True" |
   "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<longleftrightarrow> c = c'" 
-
-lemma isem_equiv_sound:
-  "d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow>
-   c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> 
-  \<exists>j. d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-  by (induction c c' arbitrary: d s stack t s' stack' i rule: isem_equiv.induct) fastforce+
 
 declare isem_equiv.elims[elim]
 
 lemma isem_equiv_refl: "c \<equiv>\<^sub>\<turnstile>\<^sub>i c"
-  by (induction c) fastforce+
+  apply (induction c)
+  using not_None_eq 
+  by fastforce+
 
 lemma isem_equiv_sym: "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<longleftrightarrow> c' \<equiv>\<^sub>\<turnstile>\<^sub>i c"
   by (induction c c' rule: isem_equiv.induct) fastforce+
 
-lemma isem_equiv_assoc: "\<lbrakk>c \<equiv>\<^sub>\<turnstile>\<^sub>i c';c' \<equiv>\<^sub>\<turnstile>\<^sub>i c''\<rbrakk> \<Longrightarrow> c \<equiv>\<^sub>\<turnstile>\<^sub>i c''"
+lemma isem_equiv_assoc: "\<lbrakk>c \<equiv>\<^sub>\<turnstile>\<^sub>i c';c' \<equiv>\<^sub>\<turnstile>\<^sub>i c''\<rbrakk> \<Longrightarrow> c \<cong>\<^sub>\<turnstile>\<^sub>i c''"
   by (induction c c' arbitrary: c'' rule: isem_equiv.induct) auto
 
-lemma isem_equiv_correct:
+lemma isem_equiv_sound_None:
+  "d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None) \<Longrightarrow>
+   c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> 
+   d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None)"
+  apply (induction c c' arbitrary: d s stack t s' stack' rule: isem_equiv.induct) 
+                      apply auto 
+    apply blast
+  sorry
+(* FORDELAY
+  apply force
+  by force
+*)
+lemma isem_equiv_correct_None:
   "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> 
-  \<exists>i. d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<equiv> \<exists>j. d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',j)"
-  using isem_equiv_sym isem_equiv_sound by (smt (verit, best))
+   d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None) \<equiv> d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',None)"
+  using isem_equiv_sound_None isem_equiv_sym by (smt (z3))
+
+lemma isem_equiv_sound_Some:
+  "d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some i) \<Longrightarrow>
+   c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> 
+   \<exists>j. d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some j)"
+  apply (induction c c' arbitrary: d s stack t s' stack' i rule: isem_equiv.induct) 
+                      apply auto 
+     apply (meson iSeqNone isem_equiv_sound_None)
+    apply (meson asem_equiv_sound iSeqSome' isem_equiv_assoc isem_equiv_refl)
+  using iIfTrue_index_Ex apply simp
+  using iIfFalse_index_Ex apply simp
+  by blast
+
+lemma isem_equiv_correct_Some:
+  "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> 
+  \<exists>i. d \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some i) \<equiv> \<exists>j. d \<turnstile>Rec\<rightharpoonup>i (c',s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',Some j)"
+  using isem_equiv_sym isem_equiv_sound_Some by (smt (z3))
 
 end

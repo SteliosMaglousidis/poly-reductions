@@ -17,9 +17,7 @@ session GrecToTRec in GRecToTRec = "General_Recursive_IMP" +
   theories
     GRecToTRec
 
-session IMP = "IMP-" +
-  sessions 
-    "HOL-Eisbach"
+session IMP = "HOL-Eisbach" +
   theories
     Com
     Big_StepT

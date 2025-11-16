@@ -17,7 +17,7 @@ session GrecToTRec in GRecToTRec = "General_Recursive_IMP" +
   theories
     GRecToTRec
 
-session eIMP = "IMP-" +
+session IMP =
   sessions 
     "HOL-Eisbach"
   theories
