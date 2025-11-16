@@ -10,12 +10,13 @@ fun append_tscom_tagged :: "tscom_tagged \<Rightarrow> tscom_tagged \<Rightarrow
 declare append_tscom_tagged.elims[elim]
 
 lemma append_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c1#;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (append_tscom_tagged c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
-  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom_tagged.induct)
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' i rule: append_tscom_tagged.induct)
   apply auto 
-  by fastforce+
+        apply fastforce+
+  by (metis (no_types, lifting) add.assoc iSeqSome iSeq_annot_Ex)
 
 lemma append_complete: "c' \<turnstile>Rec\<rightharpoonup>i (append_tscom_tagged c1 c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c1#;;c2,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
-  apply (induction c1 c2 arbitrary: c' s stack t s' stack' rule: append_tscom_tagged.induct)
+  apply (induction c1 c2 arbitrary: c' s stack t s' stack' i rule: append_tscom_tagged.induct)
   apply auto 
   by fastforce+
 
@@ -34,15 +35,16 @@ lemma normalize_branching_sound: "c' \<turnstile>Rec\<rightharpoonup>i (c,s,stac
                               \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
   apply (induction c arbitrary: c' s stack t s' stack' i rule: normalize_branching.induct)
          apply auto apply fastforce
-   apply fastforce
-  by (meson append_correct iSeq)
+    apply fastforce
+  apply (meson append_sound iSeqNone)
+  by (meson append_sound iSeqSome)
 
 lemma normalize_branching_complete: "c' \<turnstile>Rec\<rightharpoonup>i (NORM c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i) 
                                  \<Longrightarrow> c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t \<^esup> (s',stack',i)" 
   apply (induction c arbitrary: c' s stack t s' stack' i rule: normalize_branching.induct)
          apply auto apply fastforce
    apply fastforce 
-  by (smt (verit, ccfv_threshold) append_complete iSeq iSeq_tE)
+  by (smt (verit, ccfv_threshold) append_complete iSeqNone iSeqSome iSeq_tE)
 
 corollary normalize_branching_correct: "c' \<turnstile>Rec\<rightharpoonup>i (NORM c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i) 
                                       \<equiv> c' \<turnstile>Rec\<rightharpoonup>i (c,s,stack) \<Rightarrow>\<^bsup>t\<^esup> (s',stack',i)" 
@@ -64,10 +66,13 @@ lemma normalized_append: "\<turnstile>\<^bsub>NORM\<^esub> c\<^sub>1 \<Longright
 lemma normalized_branching: "\<turnstile>\<^bsub>NORM\<^esub> (NORM c)"
   by (induction c rule: normalize_branching.induct) (auto simp add: normalized_append)
 
-lemma branches_equiv: "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> (branches c \<longleftrightarrow> branches c')" 
+lemma branches_equiv: "c \<cong>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> (branches c \<longleftrightarrow> branches c')" 
   by (induction c c' rule: isem_equiv.induct) auto
 
-lemma normalized_equiv: "c \<equiv>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> (\<turnstile>\<^bsub>NORM\<^esub> c \<longleftrightarrow> \<turnstile>\<^bsub>NORM\<^esub> c')" 
+lemma normalized_equiv: "c \<cong>\<^sub>\<turnstile>\<^sub>i c' \<Longrightarrow> (\<turnstile>\<^bsub>NORM\<^esub> c \<longleftrightarrow> \<turnstile>\<^bsub>NORM\<^esub> c')" 
   by (induction c c' rule: isem_equiv.induct) (auto simp add: branches_equiv)
+
+lemma no_branches_norm: "\<not>branches c \<Longrightarrow> \<turnstile>\<^bsub>NORM\<^esub> c"
+  by (induction c) auto
 
 end
